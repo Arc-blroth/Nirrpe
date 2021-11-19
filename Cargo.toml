@@ -1,0 +1,9 @@
+cargo-features = ["strip"]
+
+[workspace]
+members = []
+
+[profile.release]
+lto = true
+strip = true
+opt-level = 3
