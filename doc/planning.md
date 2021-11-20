@@ -11,19 +11,16 @@ version = 1
 name = "Character"
 # parent = ""
 
-[key]
-name = "Name"
-
-[properties.flavor]
+[attributes.flavor]
 name = "Description"
 type = "string"
 
-[properties.hp]
+[attributes.hp]
 name = "HP"
 type = "double"
 display = { type = "bar", foreground = ":red_heart:", background = ":black_heart:" }
 
-[properties.mana]
+[attributes.mana]
 name = "Mana"
 type = "double"
 display = { type = "bar", foreground = ":blue_square:", background = ":black_large_square:" }
@@ -31,8 +28,11 @@ display = { type = "bar", foreground = ":blue_square:", background = ":black_lar
 
 Example object:
 ```toml
-[character]
+[nirrpe_object]
 name = "Arcblroth"
+owner = "911482430207172608"
+
+[character]
 flavor = "the Worldbuilder"
 hp = 20
 mana = 10
@@ -130,6 +130,11 @@ Hot-reloads all scripts (if given no arguments), or the given script(s). Only ex
 
 All objects implicitly include a trait called `nirrpe_object`, which is defined as
 ```toml
+[properties.name]
+name = "Name"
+type = "string"
+display = { type = "none" }
+
 [properties.owner]
 name = "Owner"
 type = "snowflake"
@@ -163,7 +168,7 @@ Schemas can specify "hooks", or scripts that are invoked any time an object with
 // scripts/flavor_create.rs
 
 use nirrpe::ObjectStore;	
-use nirrpe::runtime::Flavor;
+use nirrpe_runtime::Flavor;
 use serenity::model::interactions::application_command::ApplicationCommand;
 
 async fn run(command: ApplicationCommand, objects: &mut ObjectStore, name: &String, flavor: &mut Flavor) {}

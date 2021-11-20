@@ -1,0 +1,14 @@
+[package]
+name = "nirrpe"
+version = "0.1.0"
+edition = "2021"
+authors = [
+    "Arc-blroth <45273859+Arc-blroth@users.noreply.github.com>",
+    "MaowImpl <aidancrafter@gmail.com>"
+]
+
+[lib]
+
+[dependencies]
+serde = { version = "1.0.130", features = ["derive"] }
+toml = "0.5.8"

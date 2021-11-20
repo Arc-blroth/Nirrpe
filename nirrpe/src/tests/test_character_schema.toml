@@ -1,0 +1,17 @@
+[schema]
+version = 1
+name = "Character"
+
+[attributes.flavor]
+name = "Description"
+type = "string"
+
+[attributes.hp]
+name = "HP"
+type = "double"
+display = { type = "bar", foreground = ":red_heart:", background = ":black_heart:" }
+
+[attributes.mana]
+name = "Mana"
+type = "double"
+display = { type = "bar", foreground = ":blue_square:", background = ":black_large_square:" }

@@ -1,7 +1,10 @@
 cargo-features = ["strip"]
 
 [workspace]
-members = []
+members = [
+    "nirrpe",
+    "nirrpe_launcher"
+]
 
 [profile.release]
 lto = true
