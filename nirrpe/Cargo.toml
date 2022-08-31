@@ -1,0 +1,16 @@
+[package]
+name = "nirrpe"
+version = "0.1.0"
+edition = "2021"
+authors = ["Arc-blroth <45273859+Arc-blroth@users.noreply.github.com>"]
+readme = "../README.md"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Arc-blroth/nirrpe"
+description = "automated roleplay language"
+
+[dependencies]
+pest = "2.3.0"
+pest_derive = "2.3.0"
+lasso = { version = "0.6.0", features = ["serialize"] }
+serde = "1.0.144"
+unicode-normalization = "0.1.21"

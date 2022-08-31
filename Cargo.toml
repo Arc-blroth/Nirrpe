@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    "nirrpe",
+    "nirrpe-repl",
+]
+
+[profile.release]
+lto = true
+opt-level = 3

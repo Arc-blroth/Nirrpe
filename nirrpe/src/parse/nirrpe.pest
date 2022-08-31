@@ -1,0 +1,16 @@
+// Nirrpe's language grammar
+
+program = { SOI ~ stmt* ~ EOI }
+
+stmt = { expr }
+
+expr = {
+    methodCall
+}
+
+methodCall = { IDENT ~ "(" ~ expr? ~ ")" }
+
+// https://www.unicode.org/reports/tr31/#D1
+IDENT      = { (XID_START | "_") ~ XID_CONTINUE* }
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
