@@ -21,7 +21,7 @@ pub struct NirrpeParser;
 pub type ParseResult<T> = Result<T, Error<Rule>>;
 
 // Generic trait for parsing AST nodes.
-pub trait Parseable: Sized {
+pub trait Parsable: Sized {
     /// Parses the given rule into this AST node.
     ///
     /// # Panics
@@ -32,12 +32,12 @@ pub trait Parseable: Sized {
 impl Program {
     pub fn parse<S: AsRef<str>>(rodeo: &mut Rodeo, program: S) -> ParseResult<Program> {
         let mut pairs = NirrpeParser::parse(Rule::program, program.as_ref())?;
-        let program = <Self as Parseable>::parse(rodeo, pairs.next().unwrap())?;
+        let program = <Self as Parsable>::parse(rodeo, pairs.next().unwrap())?;
         Ok(program)
     }
 }
 
-impl Parseable for Program {
+impl Parsable for Program {
     fn parse(rodeo: &mut Rodeo, pair: Pair<Rule>) -> ParseResult<Self> {
         assert_eq!(pair.as_rule(), Rule::program);
         let mut stmts = Vec::new();
@@ -50,7 +50,7 @@ impl Parseable for Program {
     }
 }
 
-impl Parseable for Stmt {
+impl Parsable for Stmt {
     fn parse(rodeo: &mut Rodeo, pair: Pair<Rule>) -> ParseResult<Self> {
         assert_eq!(pair.as_rule(), Rule::stmt);
         let inner = pair.into_single_inner();
@@ -61,7 +61,7 @@ impl Parseable for Stmt {
     }
 }
 
-impl Parseable for Expr {
+impl Parsable for Expr {
     fn parse(rodeo: &mut Rodeo, pair: Pair<Rule>) -> ParseResult<Self> {
         assert_eq!(pair.as_rule(), Rule::expr);
         let inner = pair.into_single_inner();

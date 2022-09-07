@@ -5,7 +5,7 @@ use pest::error::{Error, ErrorVariant};
 use pest::iterators::Pair;
 
 use crate::parse::util::GetSingleInner;
-use crate::parse::{ParseResult, Parseable, Rule};
+use crate::parse::{Parsable, ParseResult, Rule};
 
 #[derive(Debug)]
 pub enum Lit {
@@ -15,7 +15,7 @@ pub enum Lit {
     Float(f64),
 }
 
-impl Parseable for Lit {
+impl Parsable for Lit {
     fn parse(_rodeo: &mut Rodeo, pair: Pair<Rule>) -> ParseResult<Self> {
         assert_eq!(pair.as_rule(), Rule::lit);
         let inner = pair.into_single_inner();

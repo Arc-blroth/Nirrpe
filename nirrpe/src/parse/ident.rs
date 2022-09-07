@@ -4,7 +4,7 @@ use lasso::{Rodeo, Spur};
 use pest::iterators::Pair;
 use unicode_normalization::{is_nfc_quick, IsNormalized, UnicodeNormalization};
 
-use crate::parse::{ParseResult, Parseable, Rule};
+use crate::parse::{Parsable, ParseResult, Rule};
 
 /// An interned, NFC-normalized Unicode string.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -32,7 +32,7 @@ impl Ident {
     }
 }
 
-impl Parseable for Ident {
+impl Parsable for Ident {
     fn parse(rodeo: &mut Rodeo, pair: Pair<Rule>) -> ParseResult<Self> {
         assert_eq!(pair.as_rule(), Rule::IDENT);
         Ok(Self::new(rodeo, pair.as_str()))
