@@ -1,10 +1,16 @@
 use nirrpe::parse::ast::Program;
+use nirrpe::runtime::NirrpeRuntime;
 
 fn main() {
-    match Program::parse(r#"print("hello\sworld!")"#) {
-        Ok((rodeo, program)) => {
-            println!("{:#?}", rodeo);
+    let mut runtime = NirrpeRuntime::default();
+    match Program::parse(&mut runtime.rodeo, include_str!("zero.nirrpe")) {
+        Ok(program) => {
+            println!("{:#?}", runtime.rodeo);
             println!("{:#?}", program);
+            println!();
+            if let Err(err) = runtime.execute(program) {
+                eprintln!("{:?}", err);
+            }
         }
         Err(err) => {
             eprintln!("{}", err);

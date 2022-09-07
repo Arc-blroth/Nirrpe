@@ -30,11 +30,10 @@ pub trait Parseable: Sized {
 }
 
 impl Program {
-    pub fn parse<S: AsRef<str>>(program: S) -> Result<(Rodeo, Program), Error<Rule>> {
-        let mut rodeo = Rodeo::new();
+    pub fn parse<S: AsRef<str>>(rodeo: &mut Rodeo, program: S) -> ParseResult<Program> {
         let mut pairs = NirrpeParser::parse(Rule::program, program.as_ref())?;
-        let program = <Self as Parseable>::parse(&mut rodeo, pairs.next().unwrap())?;
-        Ok((rodeo, program))
+        let program = <Self as Parseable>::parse(rodeo, pairs.next().unwrap())?;
+        Ok(program)
     }
 }
 
