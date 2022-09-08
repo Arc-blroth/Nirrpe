@@ -9,7 +9,7 @@ expr = {
     | lit
 }
 
-methodCall = { IDENT ~ "(" ~ expr? ~ ")" }
+methodCall = { IDENT ~ "(" ~ (expr ~ ",")* ~ (expr ~ ","?)? ~ ")" }
 
 lit = { stringLit | charLit | numLit }
 
