@@ -9,6 +9,7 @@ repository = "https://github.com/Arc-blroth/nirrpe"
 description = "automated roleplay language"
 
 [dependencies]
+bitflags = "1.3.2"
 pest = "2.3.0"
 pest_derive = "2.3.0"
 lasso = { version = "0.6.0", features = ["serialize"] }

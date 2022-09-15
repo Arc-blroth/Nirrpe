@@ -2,7 +2,27 @@
 
 program = { SOI ~ stmt* ~ EOI }
 
-stmt = { expr }
+stmt = { decl | expr }
+
+decl = {
+    fnDecl
+}
+
+modifier = {
+    "extern"
+    | "pub"
+    | "priv"
+    | "pure"
+    | "impure"
+}
+
+fnDecl = { modifier* ~ "fn" ~ IDENT ~ "(" ~ (fnArg ~ ",")* ~ (fnVariadicArgEllipse? ~ fnArg ~ ","?)? ~ ")" ~ (("=" ~ expr) | fnBody)? }
+
+fnVariadicArgEllipse = { "..." }
+
+fnArg = { IDENT ~ ":" ~ IDENT }
+
+fnBody = { "{" ~ stmt* ~ "}" }
 
 expr = {
     methodCall

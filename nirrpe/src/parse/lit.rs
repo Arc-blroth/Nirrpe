@@ -1,10 +1,9 @@
 use std::str::FromStr;
 
 use lasso::Rodeo;
-use pest::error::{Error, ErrorVariant};
 use pest::iterators::Pair;
 
-use crate::parse::util::GetSingleInner;
+use crate::parse::util::{parse_error, GetSingleInner};
 use crate::parse::{Parsable, ParseResult, Rule};
 
 #[derive(Debug)]
@@ -73,25 +72,13 @@ fn parse_char_lit(pair: Pair<Rule>) -> ParseResult<char> {
         )
         .ok()
         .and_then(char::from_u32)
-        .ok_or_else(|| {
-            Error::new_from_span(
-                ErrorVariant::CustomError {
-                    message: "invalid unicode character escape".to_string(),
-                },
-                inner.as_span(),
-            )
-        }),
+        .ok_or_else(|| parse_error("invalid unicode character escape", inner.as_span())),
         Rule::stringLitCharControlEscape => {
             let rhs_pair = inner.into_single_inner();
             let rhs_span = rhs_pair.as_span();
-            let rhs: u8 = parse_char_lit(rhs_pair)?.try_into().map_err(|_| {
-                Error::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: "invalid control character escape".to_string(),
-                    },
-                    rhs_span,
-                )
-            })?;
+            let rhs: u8 = parse_char_lit(rhs_pair)?
+                .try_into()
+                .map_err(|_| parse_error("invalid control character escape", rhs_span))?;
             // SAFETY: all 5-bit chars are valid
             Ok(unsafe { char::from_u32_unchecked((rhs & 0b00011111) as u32) })
         }
@@ -99,14 +86,9 @@ fn parse_char_lit(pair: Pair<Rule>) -> ParseResult<char> {
             let is_reversed_meta_control = !inner_str.starts_with(r#"\M-"#);
             let rhs_pair = inner.into_single_inner();
             let rhs_span = rhs_pair.as_span();
-            let rhs: u8 = parse_char_lit(rhs_pair)?.try_into().map_err(|_| {
-                Error::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: "invalid meta character escape".to_string(),
-                    },
-                    rhs_span,
-                )
-            })?;
+            let rhs: u8 = parse_char_lit(rhs_pair)?
+                .try_into()
+                .map_err(|_| parse_error("invalid meta character escape", rhs_span))?;
             let rhs = if is_reversed_meta_control {
                 rhs & 0b00011111
             } else {
