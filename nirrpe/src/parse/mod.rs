@@ -1,96 +1,95 @@
 pub mod ast;
-pub mod function;
 pub mod ident;
-pub mod lit;
-pub mod modifier;
-pub mod util;
+pub mod lexer;
+pub mod token;
+pub mod utils;
 
-use lasso::Rodeo;
-use pest::error::Error;
-use pest::iterators::Pair;
-use pest::Parser;
-use pest_derive::Parser;
+use chumsky::prelude::{choice, end, just, recursive, SimpleSpan};
+use chumsky::{select, Parser};
+use token::Token;
 
-use crate::parse::ast::{Decl, Expr, FnDecl, Program, Stmt};
-use crate::parse::ident::Ident;
-use crate::parse::lit::Lit;
-use crate::parse::util::GetSingleInner;
+use crate::parse::ast::{BinaryOp, Expr, Lit};
+use crate::parse::token::Ctrl;
 
-#[derive(Parser)]
-#[grammar = "parse/nirrpe.pest"]
-pub struct NirrpeParser;
-
-pub type ParseResult<T> = Result<T, Error<Rule>>;
-
-// Generic trait for parsing AST nodes.
-pub trait Parsable: Sized {
-    /// Parses the given rule into this AST node.
-    ///
-    /// # Panics
-    /// If the given rule does not match the type of this node.
-    fn parse(rodeo: &mut Rodeo, pair: Pair<Rule>) -> ParseResult<Self>;
+macro Parser($s:lifetime, $output:ty) {
+    impl ::chumsky::Parser<
+        $s,
+        ::chumsky::input::SpannedInput<
+            crate::parse::token::Token,
+            ::chumsky::span::SimpleSpan,
+            &$s [(crate::parse::token::Token, ::chumsky::span::SimpleSpan)],
+        >,
+        $output,
+        ::chumsky::extra::Err<
+            chumsky::error::Rich<
+                $s,
+                crate::parse::token::Token,
+                ::chumsky::span::SimpleSpan
+            >
+        >
+    > + ::core::clone::Clone
 }
 
-impl Program {
-    pub fn parse<S: AsRef<str>>(rodeo: &mut Rodeo, program: S) -> ParseResult<Program> {
-        let mut pairs = NirrpeParser::parse(Rule::program, program.as_ref())?;
-        let program = <Self as Parsable>::parse(rodeo, pairs.next().unwrap())?;
-        Ok(program)
-    }
-}
+pub type Spanned<T> = (T, SimpleSpan);
 
-impl Parsable for Program {
-    fn parse(rodeo: &mut Rodeo, pair: Pair<Rule>) -> ParseResult<Self> {
-        assert_eq!(pair.as_rule(), Rule::program);
-        let mut stmts = Vec::new();
-        for pair in pair.into_inner() {
-            if pair.as_rule() != Rule::EOI {
-                stmts.push(Stmt::parse(rodeo, pair)?);
-            }
+pub fn parser<'s>() -> Parser!['s, Expr] {
+    recursive(|expr| {
+        let atom = select! {
+            Token::Int(x) => Expr::Lit(Lit::Int(x)),
         }
-        Ok(Self { stmts })
-    }
+        .labelled("value")
+        .or(expr.delimited_by(just(Token::Ctrl(Ctrl::LeftParen)), just(Token::Ctrl(Ctrl::RightParen))));
+
+        let pow = binary_ops!(atom, [BinaryOp::Pow]);
+
+        let unary = pow;
+
+        let more_binary_ops = binary_ops!(
+            unary,
+            [BinaryOp::Mul, BinaryOp::Div, BinaryOp::Rem],
+            [BinaryOp::Add, BinaryOp::Sub],
+            [BinaryOp::Shl, BinaryOp::Shr],
+            [BinaryOp::Rol, BinaryOp::Ror],
+            [BinaryOp::BitAnd],
+            [BinaryOp::Xor],
+            [BinaryOp::BitOr],
+            [
+                BinaryOp::Eq,
+                BinaryOp::Neq,
+                BinaryOp::Lt,
+                BinaryOp::Lte,
+                BinaryOp::Gt,
+                BinaryOp::Gte
+            ],
+            [BinaryOp::And],
+            [BinaryOp::Or],
+        );
+
+        more_binary_ops
+    })
+    .then_ignore(end())
 }
 
-impl Parsable for Stmt {
-    fn parse(rodeo: &mut Rodeo, pair: Pair<Rule>) -> ParseResult<Self> {
-        assert_eq!(pair.as_rule(), Rule::stmt);
-        let inner = pair.into_single_inner();
-        match inner.as_rule() {
-            Rule::decl => Ok(Stmt::Decl(Decl::parse(rodeo, inner)?)),
-            Rule::expr => Ok(Stmt::Expr(Expr::parse(rodeo, inner)?)),
-            _ => unreachable!(),
-        }
-    }
+fn binary_op<const O: BinaryOp>(left: Box<Expr>, right: Box<Expr>) -> Expr {
+    Expr::BinaryOp { op: O, left, right }
 }
 
-impl Parsable for Decl {
-    fn parse(rodeo: &mut Rodeo, pair: Pair<Rule>) -> ParseResult<Self> {
-        assert_eq!(pair.as_rule(), Rule::decl);
-        let inner = pair.into_single_inner();
-        match inner.as_rule() {
-            Rule::fnDecl => Ok(Decl::FnDecl(FnDecl::parse(rodeo, inner)?)),
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl Parsable for Expr {
-    fn parse(rodeo: &mut Rodeo, pair: Pair<Rule>) -> ParseResult<Self> {
-        assert_eq!(pair.as_rule(), Rule::expr);
-        let inner = pair.into_single_inner();
-        match inner.as_rule() {
-            Rule::methodCall => {
-                let mut inner = inner.into_inner();
-                let name = Ident::parse(rodeo, inner.next().unwrap())?;
-                let mut args = Vec::new();
-                for arg in inner {
-                    args.push(Expr::parse(rodeo, arg)?);
-                }
-                Ok(Expr::MethodCall { name, args })
-            }
-            Rule::lit => Ok(Expr::Lit(Lit::parse(rodeo, inner)?)),
-            _ => unreachable!(),
-        }
-    }
-}
+macro binary_ops($atom:expr, [$($op:expr),+$(,)?]$(,)?$(,$($rest:tt)+)?) {{
+    let out = $atom.clone().foldl(
+        choice([
+            $(
+                just(Token::Op($op)).to(binary_op::<{ $op }> as fn(_, _) -> _)
+            ),+
+        ])
+        .then($atom)
+        .repeated(),
+        |left, (op, right)| op(Box::new(left), Box::new(right)),
+    )
+    // TODO(arc) I literally don't have enough memory to compile the parser on my computer
+    //           without short-circuiting the type system here, but allocations cringe ;(
+    .boxed();
+    $(
+        let out = binary_ops!(out, $($rest)+);
+    )?
+    out
+}}

@@ -1,1 +1,0 @@
-pub extern pure fn print(...args: Object)
