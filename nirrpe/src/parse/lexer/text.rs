@@ -1,9 +1,11 @@
-use chumsky::prelude::{any, just, none_of};
+use chumsky::prelude::{any, just, none_of, via_parser};
 use chumsky::{IterParser, Parser};
 
 use crate::parse::lexer::Lexer;
 use crate::parse::token::Token;
-use crate::parse::utils::{just_str, n_digits, ParserTryUnwrapped};
+use crate::parse::utils::{just_str, n_digits, recover_delimited_by, ParserTryUnwrapped};
+
+const REPLACEMENT: char = '\u{fffd}';
 
 pub fn lexer<'s>() -> Lexer!['s, Token] {
     let char_non_escape = none_of(r#""\"#);
@@ -17,7 +19,8 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
             .unwrapped()
             .map(char::try_from)
             .try_unwrapped()
-            .delimited_by(just('{'), just('}')),
+            .delimited_by(just('{'), just('}'))
+            .recover_with(via_parser(recover_delimited_by('{', '}').map(|_| REPLACEMENT))),
     );
 
     let char_single_escape = just('\\')
@@ -58,48 +61,79 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
         .map(|x| u8::try_from(x).map_err(|_| "Invalid control character escape"))
         .try_unwrapped()
         // SAFETY: all 5-bit chars are valid
-        .map(|x| unsafe { char::from_u32_unchecked((x & 0x1f) as u32) });
+        .map(|x| unsafe { char::from_u32_unchecked((x & 0x1f) as u32) })
+        .recover_with(via_parser(
+            char_control_escape_start
+                .clone()
+                .ignore_then(char_not_control_meta_escape.clone().or_not().ignored())
+                .map(|_| REPLACEMENT),
+        ));
     let char_meta_escape = meta_control_escape_start
         .clone()
         .ignore_then(char_not_control_meta_escape.clone())
         .map(|x| u8::try_from(x).map_err(|_| "Invalid meta character escape"))
         .try_unwrapped()
         // SAFETY: all 1-byte chars are valid
-        .map(|x| unsafe { char::from_u32_unchecked((x | 0x80) as u32) });
-    let char_meta_control_escape = char_control_escape_start
+        .map(|x| unsafe { char::from_u32_unchecked((x | 0x80) as u32) })
+        .recover_with(via_parser(
+            meta_control_escape_start
+                .clone()
+                .ignore_then(char_not_control_meta_escape.clone().or_not().ignored())
+                .map(|_| REPLACEMENT),
+        ));
+    let char_meta_control_escape_start = char_control_escape_start
         .clone()
         .ignore_then(meta_control_escape_start.clone())
-        .or(meta_control_escape_start.ignore_then(char_control_escape_start))
+        .or(meta_control_escape_start.ignore_then(char_control_escape_start));
+    let char_meta_control_escape = char_meta_control_escape_start
+        .clone()
         .ignore_then(char_not_control_meta_escape.clone())
         .map(|x| u8::try_from(x).map_err(|_| "Invalid meta control character escape"))
         .try_unwrapped()
         // SAFETY: all 1-byte chars are valid
-        .map(|x| unsafe { char::from_u32_unchecked(((x & 0x1f) | 0x80) as u32) });
+        .map(|x| unsafe { char::from_u32_unchecked(((x & 0x1f) | 0x80) as u32) })
+        .recover_with(via_parser(
+            char_meta_control_escape_start
+                .ignore_then(char_not_control_meta_escape.clone().or_not().ignored())
+                .map(|_| REPLACEMENT),
+        ));
 
     let char = char_not_control_meta_escape
+        .or(char_meta_control_escape)
         .or(char_control_escape)
-        .or(char_meta_escape)
-        .or(char_meta_control_escape);
+        .or(char_meta_escape);
 
-    let string_lit = char.clone().repeated().collect().padded_by(just('"')).map(Token::Str);
-    let char_lit = char.padded_by(just('\'')).map(Token::Char);
+    let string_lit = char
+        .clone()
+        .repeated()
+        .collect()
+        .padded_by(just('"'))
+        .map(Token::Str)
+        .recover_with(via_parser(recover_delimited_by('"', '"').map(|_| Token::Err)));
+    #[rustfmt::skip]
+    let char_lit = char
+        .padded_by(just('\''))
+        .map(Token::Char)
+        .recover_with(via_parser(recover_delimited_by('\'', '\'').map(|_| Token::Char(REPLACEMENT))));
 
     string_lit.or(char_lit)
 }
 
 fn unicode_fixed_width_escape<'s>(escape: char, width: usize) -> Lexer!['s, char] {
-    just('\\').ignore_then(just(escape)).ignore_then(
-        n_digits(16, 1..=width)
-            .slice()
-            .map(move |x: &str| {
-                (x.len() == width)
-                    .then_some(x)
-                    .ok_or_else(|| format!("truncated \\{}{} escape", escape, "X".repeat(width)))
-            })
-            .try_unwrapped()
-            .map(|x| u32::from_str_radix(x, 16))
-            .unwrapped()
-            .map(char::try_from)
-            .try_unwrapped(),
-    )
+    let prefix = just('\\').ignore_then(just(escape)).ignored();
+    prefix
+        .clone()
+        .then(n_digits(16, 1..=width))
+        .slice()
+        .map(move |x: &str| {
+            (x.len() - 2 == width)
+                .then_some(&x[2..])
+                .ok_or_else(|| format!("truncated \\{}{} escape", escape, "X".repeat(width)))
+        })
+        .try_unwrapped()
+        .map(|x| u32::from_str_radix(x, 16))
+        .unwrapped()
+        .map(char::try_from)
+        .try_unwrapped()
+        .recover_with(via_parser(prefix.then(n_digits(16, 1..=width)).map(|_| REPLACEMENT)))
 }

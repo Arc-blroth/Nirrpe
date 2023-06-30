@@ -25,6 +25,9 @@ fn main() {
 
     if !errs.is_empty() {
         print_error_report(errs, &filename, &src);
+        if let Some(tokens) = tokens {
+            println!("ParseResult {{ output: {:?} }}", tokens);
+        }
     } else if let Some(tokens) = tokens {
         println!("ParseResult {{ output: {:?} }}", tokens);
 

@@ -12,6 +12,6 @@ description = "automated roleplay language"
 anyhow = "1.0.71"
 ariadne = { version = "0.3.0", features = ["auto-color"] }
 bitflags = "2.3.2"
-chumsky = { version = "1.0.0-alpha.4", features = ["label"] }
+chumsky = { git = "https://github.com/Arc-blroth/chumsky", rev = "f5ce68156e609070d9e6c2af922231b5eafe90d3", features = ["label"] }
 enum-assoc = "1.1.0"
 unicode-normalization = "0.1.22"

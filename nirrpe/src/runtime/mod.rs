@@ -31,12 +31,10 @@ impl Expr {
                     BinaryOp::Gte => unimplemented!(),
                 }
             }
-            Expr::Lit(lit) => {
-                match lit {
-                    Lit::Int(x) => *x,
-                    _ => unimplemented!(),
-                }
-            }
+            Expr::Lit(lit) => match lit {
+                Lit::Int(x) => *x,
+                _ => unimplemented!(),
+            },
         }
     }
 }

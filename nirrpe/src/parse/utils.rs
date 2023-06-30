@@ -4,7 +4,7 @@ use chumsky::combinator::{Repeated, TryMap};
 use chumsky::error::Rich;
 use chumsky::extra::ParserExtra;
 use chumsky::input::ValueInput;
-use chumsky::prelude::{any, Input};
+use chumsky::prelude::{any, just, none_of, Input};
 use chumsky::text::{digits, Char};
 use chumsky::util::MaybeRef;
 use chumsky::Parser;
@@ -22,6 +22,7 @@ impl<'a, P, I, O, M, E, S> ParserTryUnwrapped<'a, I, O, M, E> for P
 where
     P: Parser<'a, I, Result<O, M>, E>,
     I: Input<'a, Span = S>,
+    O: Clone,
     M: ToString,
     E: ParserExtra<'a, I, Error = Rich<'a, I::Token, S>>,
 {
@@ -29,7 +30,7 @@ where
     where
         Self: Sized,
     {
-        self.try_map(&|o, span| o.map_err(|e| Rich::custom(span, e)))
+        self.try_map_override(&|o, span| o.map_err(|e| Rich::custom(span, e)))
     }
 }
 
@@ -59,4 +60,16 @@ pub fn just_str<'s>(s: &'static str) -> Lexer!['s, &'s str] {
             ))
         }
     })
+}
+
+#[must_use]
+pub fn recover_delimited_by<'a, C, I, E>(start: C, end: C) -> impl Parser<'a, I, (), E> + Clone
+where
+    C: Char,
+    I: ValueInput<'a> + Input<'a, Token = C>,
+    E: ParserExtra<'a, I>,
+{
+    just(start)
+        .ignore_then(none_of(end).repeated().ignore_then(just(end)))
+        .ignored()
 }

@@ -1,7 +1,7 @@
 mod numbers;
 mod text;
 
-use chumsky::prelude::{any, choice, end, IterParser, one_of, skip_then_retry_until, Parser};
+use chumsky::prelude::{any, choice, end, one_of, skip_then_retry_until, IterParser, Parser};
 
 use crate::parse::ast::BinaryOp;
 use crate::parse::token::{Ctrl, Token};
