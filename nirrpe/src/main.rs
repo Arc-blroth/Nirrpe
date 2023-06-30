@@ -3,8 +3,9 @@
 #![feature(type_alias_impl_trait)]
 #![feature(int_roundings)]
 #![feature(decl_macro)]
-#![allow(incomplete_features)]
 #![feature(adt_const_params)]
+#![allow(incomplete_features)]
+#![allow(clippy::type_complexity)]
 
 use std::fmt::Debug;
 use std::{env, fs};
@@ -43,6 +44,7 @@ fn main() {
     }
 }
 
+#[allow(clippy::ptr_arg)]
 fn print_error_report<T>(errs: Vec<Rich<T>>, filename: &String, src: &String)
 where
     T: Debug + Clone,

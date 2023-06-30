@@ -122,7 +122,6 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
 fn unicode_fixed_width_escape<'s>(escape: char, width: usize) -> Lexer!['s, char] {
     let prefix = just('\\').ignore_then(just(escape)).ignored();
     prefix
-        .clone()
         .then(n_digits(16, 1..=width))
         .slice()
         .map(move |x: &str| {

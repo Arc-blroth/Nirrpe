@@ -1,4 +1,3 @@
-use std::mem::size_of;
 use std::num::ParseIntError;
 
 use chumsky::prelude::{choice, just, one_of, via_parser, Parser};
@@ -11,7 +10,6 @@ use crate::parse::utils::{just_str, ParserTryUnwrapped};
 pub fn lexer<'s>() -> Lexer!['s, Token] {
     let hex_header = just('0').ignore_then(one_of("xX"));
     let hex_int = hex_header
-        .clone()
         .ignore_then(num_with_separators::<16>())
         .try_unwrapped()
         .map(Token::Int)
@@ -19,7 +17,6 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
 
     let bin_header = just('0').ignore_then(one_of("bB"));
     let bin_int = bin_header
-        .clone()
         .ignore_then(num_with_separators::<2>())
         .try_unwrapped()
         .map(Token::Int)
@@ -31,7 +28,7 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
         .allow_leading();
     let float_exp = one_of("eE")
         .ignore_then(one_of("+-").or_not().ignored())
-        .ignore_then(float_part.clone());
+        .ignore_then(float_part);
     let float = choice([
         just_str("inf"),
         just_str("Inf"),
@@ -42,17 +39,12 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
     ])
     .slice()
     .or(float_part
-        .clone()
         .or_not()
         .then(just('.'))
-        .then(float_part.clone())
-        .then(float_exp.clone().or_not())
+        .then(float_part)
+        .then(float_exp.or_not())
         .slice())
-    .or(float_part
-        .clone()
-        .then(just('.'))
-        .then(float_exp.clone().or_not())
-        .slice())
+    .or(float_part.then(just('.')).then(float_exp.or_not()).slice())
     .or(float_part.ignore_then(float_exp).slice())
     .map(|x: &str| x.replace('_', "").parse::<f64>())
     .try_unwrapped()
@@ -71,8 +63,7 @@ fn num_with_separators<'s, const RADIX: u32>() -> Lexer!['s, Result<u64, ParseIn
                 let right = right?;
                 let left_size = num_radix_bits_in::<RADIX>(left);
                 let right_size = num_radix_bits_in::<RADIX>(right);
-                const MAX_SIZE: u32 = (size_of::<u64>() * 8) as u32;
-                if left_size + right_size > MAX_SIZE {
+                if left_size + right_size > u64::BITS {
                     // forcibly generate a ParseIntError
                     Err("420".parse::<u8>().unwrap_err())
                 } else {

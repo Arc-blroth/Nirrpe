@@ -44,7 +44,7 @@ pub fn parser<'s>() -> Parser!['s, Expr] {
 
         let unary = pow;
 
-        let more_binary_ops = binary_ops!(
+        binary_ops!(
             unary,
             [BinaryOp::Mul, BinaryOp::Div, BinaryOp::Rem],
             [BinaryOp::Add, BinaryOp::Sub],
@@ -63,9 +63,7 @@ pub fn parser<'s>() -> Parser!['s, Expr] {
             ],
             [BinaryOp::And],
             [BinaryOp::Or],
-        );
-
-        more_binary_ops
+        )
     })
     .then_ignore(end())
 }
