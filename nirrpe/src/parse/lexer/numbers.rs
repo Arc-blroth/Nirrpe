@@ -89,7 +89,7 @@ fn num_with_separators_ignored<'s, const RADIX: u32>() -> Lexer!['s, Token] {
         .separated_by(just('_').ignored().repeated())
         .allow_leading()
         .allow_trailing()
-        .map(|_| Token::Err)
+        .to(Token::Err)
 }
 
 fn partial_num<'s, const RADIX: u32>() -> Lexer!['s, Result<u64, ParseIntError>] {

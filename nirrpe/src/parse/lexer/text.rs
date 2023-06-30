@@ -20,7 +20,7 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
             .map(char::try_from)
             .try_unwrapped()
             .delimited_by(just('{'), just('}'))
-            .recover_with(via_parser(recover_delimited_by('{', '}').map(|_| REPLACEMENT))),
+            .recover_with(via_parser(recover_delimited_by('{', '}').to(REPLACEMENT))),
     );
 
     let char_single_escape = just('\\')
@@ -66,7 +66,7 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
             char_control_escape_start
                 .clone()
                 .ignore_then(char_not_control_meta_escape.clone().or_not().ignored())
-                .map(|_| REPLACEMENT),
+                .to(REPLACEMENT),
         ));
     let char_meta_escape = meta_control_escape_start
         .clone()
@@ -79,7 +79,7 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
             meta_control_escape_start
                 .clone()
                 .ignore_then(char_not_control_meta_escape.clone().or_not().ignored())
-                .map(|_| REPLACEMENT),
+                .to(REPLACEMENT),
         ));
     let char_meta_control_escape_start = char_control_escape_start
         .clone()
@@ -95,7 +95,7 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
         .recover_with(via_parser(
             char_meta_control_escape_start
                 .ignore_then(char_not_control_meta_escape.clone().or_not().ignored())
-                .map(|_| REPLACEMENT),
+                .to(REPLACEMENT),
         ));
 
     let char = char_not_control_meta_escape
@@ -109,12 +109,12 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
         .collect()
         .padded_by(just('"'))
         .map(Token::Str)
-        .recover_with(via_parser(recover_delimited_by('"', '"').map(|_| Token::Err)));
+        .recover_with(via_parser(recover_delimited_by('"', '"').to(Token::Err)));
     #[rustfmt::skip]
     let char_lit = char
         .padded_by(just('\''))
         .map(Token::Char)
-        .recover_with(via_parser(recover_delimited_by('\'', '\'').map(|_| Token::Char(REPLACEMENT))));
+        .recover_with(via_parser(recover_delimited_by('\'', '\'').to(Token::Char(REPLACEMENT))));
 
     string_lit.or(char_lit)
 }
@@ -135,5 +135,5 @@ fn unicode_fixed_width_escape<'s>(escape: char, width: usize) -> Lexer!['s, char
         .unwrapped()
         .map(char::try_from)
         .try_unwrapped()
-        .recover_with(via_parser(prefix.then(n_digits(16, 1..=width)).map(|_| REPLACEMENT)))
+        .recover_with(via_parser(prefix.then(n_digits(16, 1..=width)).to(REPLACEMENT)))
 }
