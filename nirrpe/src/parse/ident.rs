@@ -6,7 +6,7 @@ use unicode_normalization::{is_nfc_quick, IsNormalized, UnicodeNormalization};
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct Ident {
-    id: String,
+    pub id: String,
 }
 
 impl Ident {

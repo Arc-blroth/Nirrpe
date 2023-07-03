@@ -7,13 +7,16 @@
 #![allow(incomplete_features)]
 #![allow(clippy::type_complexity)]
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::{env, fs};
 
 use ariadne::{Color, Label, Report, ReportKind};
 use chumsky::error::Rich;
 use chumsky::input::Input;
+use chumsky::prelude::SimpleSpan;
 use chumsky::Parser;
+
+use crate::runtime::NirrpeRuntime;
 
 pub mod parse;
 pub mod runtime;
@@ -27,27 +30,29 @@ fn main() {
     if !errs.is_empty() {
         print_error_report(errs, &filename, &src);
         if let Some(tokens) = tokens {
-            println!("ParseResult {{ output: {:?} }}", tokens);
+            println!("LexResult {{ output: {:?} }}", tokens);
         }
     } else if let Some(tokens) = tokens {
-        println!("ParseResult {{ output: {:?} }}", tokens);
+        println!("LexResult {{ output: {:?} }}", tokens);
 
-        let (expr, errs) = parse::parser()
+        let (program, errs) = parse::parser()
             .parse(tokens.as_slice().spanned((src.len()..src.len()).into()))
             .into_output_errors();
 
         if !errs.is_empty() {
             print_error_report(errs, &filename, &src);
-        } else if let Some(expr) = expr {
-            println!("result: {:?}", expr.execute());
+        } else if let Some(program) = program {
+            println!("ParseResult {{ {:?} }}", program);
+            NirrpeRuntime::new().execute(program);
         }
     }
 }
 
 #[allow(clippy::ptr_arg)]
-fn print_error_report<T>(errs: Vec<Rich<T>>, filename: &String, src: &String)
+fn print_error_report<T, L>(errs: Vec<Rich<T, SimpleSpan, L>>, filename: &String, src: &String)
 where
     T: Debug + Clone,
+    L: Display + ToString + Clone,
 {
     errs.into_iter()
         .map(|e| e.map_token(|c| format!("{:?}", c)))
@@ -61,7 +66,7 @@ where
                 )
                 .with_labels(e.contexts().map(|(label, span)| {
                     Label::new((filename.clone(), span.into_range()))
-                        .with_message(format!("while parsing this {}", label))
+                        .with_message(label.clone())
                         .with_color(Color::Yellow)
                 }))
                 .finish()

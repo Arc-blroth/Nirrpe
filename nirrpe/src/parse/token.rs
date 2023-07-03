@@ -1,6 +1,9 @@
+use std::marker::ConstParamTy;
+
 use enum_assoc::Assoc;
 
 use crate::parse::ast::BinaryOp;
+use crate::parse::ident::Ident;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
@@ -12,9 +15,11 @@ pub enum Token {
     Str(String),
     Op(BinaryOp),
     Ctrl(Ctrl),
+    Keyword(Keyword),
+    Ident(Ident),
 }
 
-#[derive(Assoc, Clone, Debug, PartialEq)]
+#[derive(Assoc, Clone, Debug, PartialEq, Eq, ConstParamTy)]
 #[func(pub const fn from_char(x: char) -> Option<Self>)]
 pub enum Ctrl {
     #[assoc(from_char = '(')]
@@ -29,10 +34,31 @@ pub enum Ctrl {
     LeftBrace,
     #[assoc(from_char = '}')]
     RightBrace,
+    #[assoc(from_char = ':')]
+    Colon,
     #[assoc(from_char = ';')]
     Semicolon,
     #[assoc(from_char = ',')]
     Comma,
     #[assoc(from_char = '.')]
     Period,
+    #[assoc(from_char = '=')]
+    Eq,
+}
+
+#[derive(Assoc, Clone, Debug, PartialEq)]
+#[func(pub const fn keyword(&self) -> &'static str)]
+pub enum Keyword {
+    #[assoc(keyword = "extern")]
+    Extern,
+    #[assoc(keyword = "fn")]
+    Fn,
+    #[assoc(keyword = "impure")]
+    Impure,
+    #[assoc(keyword = "priv")]
+    Priv,
+    #[assoc(keyword = "pub")]
+    Pub,
+    #[assoc(keyword = "pure")]
+    Pure,
 }

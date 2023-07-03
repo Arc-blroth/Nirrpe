@@ -109,12 +109,14 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
         .collect()
         .padded_by(just('"'))
         .map(Token::Str)
-        .recover_with(via_parser(recover_delimited_by('"', '"').to(Token::Err)));
+        .recover_with(via_parser(recover_delimited_by('"', '"').to(Token::Err)))
+        .labelled("string literal");
     #[rustfmt::skip]
     let char_lit = char
         .padded_by(just('\''))
         .map(Token::Char)
-        .recover_with(via_parser(recover_delimited_by('\'', '\'').to(Token::Char(REPLACEMENT))));
+        .recover_with(via_parser(recover_delimited_by('\'', '\'').to(Token::Char(REPLACEMENT))))
+        .labelled("char literal");
 
     string_lit.or(char_lit)
 }

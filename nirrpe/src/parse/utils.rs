@@ -1,6 +1,7 @@
 use std::ops::RangeInclusive;
 
 use chumsky::combinator::{Repeated, TryMap};
+use chumsky::container::Container;
 use chumsky::error::Rich;
 use chumsky::extra::ParserExtra;
 use chumsky::input::ValueInput;
@@ -8,6 +9,7 @@ use chumsky::prelude::{any, just, none_of, Input};
 use chumsky::text::{digits, Char};
 use chumsky::util::MaybeRef;
 use chumsky::Parser;
+use smallvec::{Array, SmallVec};
 
 use crate::parse::lexer::Lexer;
 
@@ -72,4 +74,19 @@ where
     just(start)
         .ignore_then(none_of(end).repeated().ignore_then(just(end)))
         .ignored()
+}
+
+#[derive(derive_more::Deref)]
+pub struct SmallVecContainer<A: Array>(SmallVec<A>);
+
+impl<A: Array> Default for SmallVecContainer<A> {
+    fn default() -> Self {
+        Self(SmallVec::default())
+    }
+}
+
+impl<A: Array> Container<A::Item> for SmallVecContainer<A> {
+    fn push(&mut self, item: A::Item) {
+        self.0.push(item);
+    }
 }

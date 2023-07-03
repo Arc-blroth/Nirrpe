@@ -16,49 +16,54 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Program {
     pub stmts: Vec<Stmt>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Stmt {
     Decl(Decl),
     Expr(Expr),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Decl {
     FnDecl(FnDecl),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FnDecl {
     pub modifiers: Modifiers,
     pub name: Ident,
     pub args: Vec<FnArg>,
+    pub return_ty: Option<Ident>,
     pub body: Option<Vec<Stmt>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FnArg {
     pub name: Ident,
     pub ty: Ident,
     pub variadic: bool,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Expr {
-    MethodCall {
+    Lit(Lit),
+    Var {
         name: Ident,
-        args: Vec<Expr>,
     },
     BinaryOp {
         op: BinaryOp,
         left: Box<Expr>,
         right: Box<Expr>,
     },
-    Lit(Lit),
+    Call {
+        target: Box<Expr>,
+        args: Vec<Expr>,
+    },
+    Error,
 }
 
 #[derive(Clone, Debug)]

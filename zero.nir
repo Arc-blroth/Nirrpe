@@ -1,1 +1,9 @@
-"\cA\x1\u12\u{dfff}\C-\u{1234}\M-\C-\u{1234}"
+extern pure fn print(x: u64)
+
+fn magic(x: u64): u64 {
+    69 * x
+}
+
+fn science(x: u64) = 42 * x
+
+print(science(magic(10)))

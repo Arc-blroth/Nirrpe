@@ -51,7 +51,7 @@ pub fn lexer<'s>() -> Lexer!['s, Token] {
     .map(Token::Float);
 
     let int = num_with_separators::<10>().try_unwrapped().map(Token::Int);
-    hex_int.or(bin_int).or(float).or(int)
+    hex_int.or(bin_int).or(float).or(int).labelled("number")
 }
 
 fn num_with_separators<'s, const RADIX: u32>() -> Lexer!['s, Result<u64, ParseIntError>] {
