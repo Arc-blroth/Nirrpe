@@ -6,9 +6,11 @@ pub mod utils;
 
 use bitflags::Flags;
 use chumsky::error::Rich;
+use chumsky::extra::Err as ChumskyErr;
 use chumsky::input::SpannedInput;
 use chumsky::label::LabelError;
-use chumsky::prelude::{choice, end, just, nested_delimiters, recursive, via_parser, SimpleSpan};
+use chumsky::prelude::{choice, end, just, nested_delimiters, recursive, via_parser, Recursive, SimpleSpan};
+use chumsky::recursive::Direct;
 use chumsky::{select, IterParser, Parser};
 use ordinal::Ordinal;
 use smallvec::SmallVec;
@@ -19,7 +21,10 @@ use crate::parse::ident::Ident;
 use crate::parse::token::{Ctrl, Keyword};
 use crate::parse::utils::SmallVecContainer;
 
-macro Parser($s:lifetime, $output:ty) {
+type ParserInput<'s> = SpannedInput<Token, SimpleSpan, &'s [(Token, SimpleSpan)]>;
+type ParserExtra<'s> = ChumskyErr<Rich<'s, Token, SimpleSpan, String>>;
+
+macro Parser($s:lifetime, $output:ty $(, $($extra:lifetime),*$(,)?)?) {
     impl ::chumsky::Parser<
         $s,
         ::chumsky::input::SpannedInput<
@@ -36,32 +41,33 @@ macro Parser($s:lifetime, $output:ty) {
                 ::std::string::String,
             >
         >
-    > + ::core::clone::Clone
+    > + ::core::clone::Clone $($(+ $extra)*)?
 }
 
 pub type Spanned<T> = (T, SimpleSpan);
 
 pub fn parser<'s>() -> Parser!['s, Program] {
-    decl()
-        .map(Stmt::Decl)
-        .or(expr().map(Stmt::Expr))
-        .repeated()
-        .collect()
-        .map(|x| Program { stmts: x })
-        .then_ignore(end())
+    recursive(|stmts| {
+        decl(stmts)
+            .map(Stmt::Decl)
+            .or(expr().map(Stmt::Expr))
+            .labelled("statement".into())
+            .separated_by(just(Token::Ctrl(Ctrl::Semicolon)).repeated().ignored())
+            .allow_leading()
+            .allow_trailing()
+            .collect()
+    })
+    .map(|x| Program { stmts: x })
+    .then_ignore(end())
 }
 
-pub fn decl<'s>() -> Parser!['s, Decl] {
+pub fn decl<'b, 's: 'b>(
+    stmts: Recursive<Direct<'s, 'b, ParserInput<'s>, Vec<Stmt>, ParserExtra<'s>>>,
+) -> Parser!['s, Decl, 'b] {
     let ident = ident();
     let r#fn = {
         let modifiers = choice([
-            just::<
-                's,
-                _,
-                SpannedInput<Token, SimpleSpan, &'s [(Token, SimpleSpan)]>,
-                chumsky::extra::Err<Rich<'s, Token, SimpleSpan, String>>,
-            >(Token::Keyword(Keyword::Extern))
-            .to(Modifiers::EXTERN),
+            just::<'s, _, ParserInput<'s>, ParserExtra<'s>>(Token::Keyword(Keyword::Extern)).to(Modifiers::EXTERN),
             just(Token::Keyword(Keyword::Impure)).to(Modifiers::IMPURE),
             just(Token::Keyword(Keyword::Priv)).to(Modifiers::PRIV),
             just(Token::Keyword(Keyword::Pub)).to(Modifiers::PUB),
@@ -89,15 +95,14 @@ pub fn decl<'s>() -> Parser!['s, Decl] {
                                 if duplicates.len() > 2 { "s" } else { "" },
                             ),
                         );
-                        type SpannedTokenInput<'s> = SpannedInput<Token, SimpleSpan, &'s [(Token, SimpleSpan)]>;
-                        <Rich<_, _, String> as LabelError<'s, SpannedTokenInput<'s>, _>>::in_context(
+                        <Rich<_, _, String> as LabelError<'s, ParserInput<'s>, _>>::in_context(
                             &mut err,
                             format!("first {} modifier found here", modifier_name),
                             duplicates[0],
                         );
                         if duplicates.len() > 2 {
                             for duplicate in duplicates.iter().enumerate().skip(2) {
-                                <Rich<_, _, String> as LabelError<'s, SpannedTokenInput<'s>, _>>::in_context(
+                                <Rich<_, _, String> as LabelError<'s, ParserInput<'s>, _>>::in_context(
                                     &mut err,
                                     format!(
                                         "{} additional {} modifier found here",
@@ -144,13 +149,11 @@ pub fn decl<'s>() -> Parser!['s, Decl] {
                     .or_not(),
             )
             .then(
-                expr()
+                stmts
                     .delimited_by(just(Token::Ctrl(Ctrl::LeftBrace)), just(Token::Ctrl(Ctrl::RightBrace)))
-                    .recover_with(via_parser(nested_recovery::<
-                        { Ctrl::LeftBracket },
-                        { Ctrl::RightBracket },
-                    >()))
-                    .map(|x| vec![Stmt::Expr(x)])
+                    .recover_with(via_parser(
+                        nested_recovery::<{ Ctrl::LeftBracket }, { Ctrl::RightBracket }>().map(|x| vec![Stmt::Expr(x)]),
+                    ))
                     .or(just(Token::Ctrl(Ctrl::Eq))
                         .ignore_then(expr())
                         .map(|x| vec![Stmt::Expr(x)]))

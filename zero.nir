@@ -1,7 +1,8 @@
 extern pure fn print(x: any)
 
-fn magic(): function {
-    print
+fn magic(a: function, b: function, c: any) {
+    a(c)
+    b(c)
 }
 
-magic()("Hello World!")
+magic(print, print, "Hello World!")
