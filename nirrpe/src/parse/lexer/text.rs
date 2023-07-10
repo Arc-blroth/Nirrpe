@@ -1,8 +1,8 @@
 use chumsky::prelude::{any, just, none_of, via_parser};
 use chumsky::{IterParser, Parser};
 
+use crate::parse::lexer::token::Token;
 use crate::parse::lexer::Lexer;
-use crate::parse::token::Token;
 use crate::parse::utils::{just_str, n_digits, recover_delimited_by, ParserTryUnwrapped};
 
 const REPLACEMENT: char = '\u{fffd}';

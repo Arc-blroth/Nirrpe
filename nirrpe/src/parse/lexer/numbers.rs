@@ -3,8 +3,8 @@ use std::num::ParseIntError;
 use chumsky::prelude::{choice, just, one_of, via_parser, Parser};
 use chumsky::text;
 
+use crate::parse::lexer::token::Token;
 use crate::parse::lexer::Lexer;
-use crate::parse::token::Token;
 use crate::parse::utils::{just_str, ParserTryUnwrapped};
 
 pub fn lexer<'s>() -> Lexer!['s, Token] {

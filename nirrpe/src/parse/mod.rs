@@ -1,7 +1,6 @@
 pub mod ast;
 pub mod ident;
 pub mod lexer;
-pub mod token;
 pub mod utils;
 
 use bitflags::Flags;
@@ -14,11 +13,10 @@ use chumsky::recursive::Direct;
 use chumsky::{select, IterParser, Parser};
 use ordinal::Ordinal;
 use smallvec::SmallVec;
-use token::Token;
 
 use crate::parse::ast::{BinaryOp, Decl, Expr, FnArg, FnDecl, Lit, Modifiers, Program, Stmt};
 use crate::parse::ident::Ident;
-use crate::parse::token::{Ctrl, Keyword};
+use crate::parse::lexer::token::{Ctrl, Keyword, Token};
 use crate::parse::utils::SmallVecContainer;
 
 type ParserInput<'s> = SpannedInput<Token, SimpleSpan, &'s [(Token, SimpleSpan)]>;
@@ -28,15 +26,15 @@ macro Parser($s:lifetime, $output:ty $(, $($extra:lifetime),*$(,)?)?) {
     impl ::chumsky::Parser<
         $s,
         ::chumsky::input::SpannedInput<
-            crate::parse::token::Token,
+            crate::parse::lexer::token::Token,
             ::chumsky::span::SimpleSpan,
-            &$s [(crate::parse::token::Token, ::chumsky::span::SimpleSpan)],
+            &$s [(crate::parse::lexer::token::Token, ::chumsky::span::SimpleSpan)],
         >,
         $output,
         ::chumsky::extra::Err<
             chumsky::error::Rich<
                 $s,
-                crate::parse::token::Token,
+                crate::parse::lexer::token::Token,
                 ::chumsky::span::SimpleSpan,
                 ::std::string::String,
             >

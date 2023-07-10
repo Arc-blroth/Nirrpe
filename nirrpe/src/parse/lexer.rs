@@ -1,11 +1,12 @@
 mod numbers;
 mod text;
+pub mod token;
 
 use chumsky::prelude::{any, choice, end, one_of, skip_then_retry_until, IterParser, Parser};
 
 use crate::parse::ast::BinaryOp;
 use crate::parse::ident::Ident;
-use crate::parse::token::{Ctrl, Keyword, Token};
+use crate::parse::lexer::token::{Ctrl, Keyword, Token};
 use crate::parse::utils::just_str;
 use crate::parse::Spanned;
 
