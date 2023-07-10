@@ -4,6 +4,7 @@
 #![feature(int_roundings)]
 #![feature(decl_macro)]
 #![feature(adt_const_params)]
+#![feature(let_chains)]
 #![allow(incomplete_features)]
 #![allow(clippy::type_complexity)]
 

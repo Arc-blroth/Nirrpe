@@ -1,8 +1,11 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+pub mod utils;
+pub mod value;
 
-use crate::parse::ast::{BinaryOp, Decl, Expr, FnDecl, Lit, Modifiers, Program, Stmt};
+use std::collections::HashMap;
+
+use crate::parse::ast::{BinaryOp, Decl, Expr, Modifiers, Program, Stmt};
 use crate::parse::ident::Ident;
+use crate::runtime::value::Value;
 
 pub struct NirrpeRuntime<'r> {
     global: Scope<'r>,
@@ -28,8 +31,7 @@ impl<'r> Default for NirrpeRuntime<'r> {
 
 pub struct Scope<'p> {
     parent: Option<&'p Scope<'p>>,
-    variables: HashMap<Ident, u64>,
-    functions: HashMap<Ident, Arc<FnDecl>>,
+    variables: HashMap<Ident, Value>,
 }
 
 impl<'p> Scope<'p> {
@@ -37,7 +39,6 @@ impl<'p> Scope<'p> {
         Self {
             parent: Some(parent),
             variables: HashMap::new(),
-            functions: HashMap::new(),
         }
     }
 
@@ -45,21 +46,13 @@ impl<'p> Scope<'p> {
         Self {
             parent: None,
             variables: HashMap::new(),
-            functions: HashMap::new(),
         }
     }
 
-    pub fn get_value(&self, name: &Ident) -> Option<u64> {
+    pub fn get_value(&self, name: &Ident) -> Option<Value> {
         match self.variables.get(name) {
-            Some(x) => Some(*x),
-            None => self.parent.and_then(|p| p.get_value(name)),
-        }
-    }
-
-    pub fn get_function(&self, name: &Ident) -> Option<Arc<FnDecl>> {
-        match self.functions.get(name) {
             Some(x) => Some(x.clone()),
-            None => self.parent.and_then(|p| p.get_function(name)),
+            None => self.parent.and_then(|p| p.get_value(name)),
         }
     }
 }
@@ -70,7 +63,7 @@ impl Program {
     }
 }
 
-fn execute_stmts(stmts: &Vec<Stmt>, scope: &mut Scope) -> Option<u64> {
+fn execute_stmts(stmts: &Vec<Stmt>, scope: &mut Scope) -> Option<Value> {
     let mut last_ret = None;
     for stmt in stmts {
         match stmt.execute(scope) {
@@ -82,15 +75,15 @@ fn execute_stmts(stmts: &Vec<Stmt>, scope: &mut Scope) -> Option<u64> {
 }
 
 impl Stmt {
-    pub fn execute(&self, scope: &mut Scope) -> Option<Option<u64>> {
+    pub fn execute(&self, scope: &mut Scope) -> Option<Option<Value>> {
         match self {
             Stmt::Decl(Decl::FnDecl(function)) => {
-                if scope.functions.contains_key(&function.name) {
+                if scope.variables.contains_key(&function.name) {
                     panic!("function {:?} already defined", function.name);
                 } else {
                     scope
-                        .functions
-                        .insert(function.name.clone(), Arc::new(function.clone()));
+                        .variables
+                        .insert(function.name.clone(), Value::Function(function.clone()));
                 }
                 Some(None)
             }
@@ -100,12 +93,9 @@ impl Stmt {
 }
 
 impl Expr {
-    pub fn execute(&self, scope: &mut Scope) -> u64 {
+    pub fn execute(&self, scope: &mut Scope) -> Value {
         match self {
-            Expr::Lit(lit) => match lit {
-                Lit::Int(x) => *x,
-                _ => unimplemented!(),
-            },
+            Expr::Lit(lit) => lit.into(),
             Expr::Var { name } => match scope.get_value(name) {
                 Some(x) => x,
                 None => panic!("variable {:?} isn't defined", name),
@@ -113,62 +103,56 @@ impl Expr {
             Expr::BinaryOp { op, left, right } => {
                 let left = left.execute(scope);
                 let right = right.execute(scope);
-                match op {
-                    BinaryOp::Add => left + right,
-                    BinaryOp::Sub => left - right,
-                    BinaryOp::Mul => left * right,
-                    BinaryOp::Div => left / right,
-                    BinaryOp::Pow => left.pow(right as u32),
-                    BinaryOp::Rem => left % right,
-                    BinaryOp::BitAnd => left & right,
-                    BinaryOp::BitOr => left | right,
-                    BinaryOp::Xor => left ^ right,
-                    BinaryOp::Shl => left << right,
-                    BinaryOp::Shr => left >> right,
-                    BinaryOp::Rol => left.rotate_left(right as u32),
-                    BinaryOp::Ror => left.rotate_right(right as u32),
-                    BinaryOp::And => unimplemented!(),
-                    BinaryOp::Or => unimplemented!(),
-                    BinaryOp::Eq => unimplemented!(),
-                    BinaryOp::Neq => unimplemented!(),
-                    BinaryOp::Lt => unimplemented!(),
-                    BinaryOp::Lte => unimplemented!(),
-                    BinaryOp::Gt => unimplemented!(),
-                    BinaryOp::Gte => unimplemented!(),
+                if let Value::U64(left) = left && let Value::U64(right) = right {
+                    Value::U64(match op {
+                        BinaryOp::Add => left + right,
+                        BinaryOp::Sub => left - right,
+                        BinaryOp::Mul => left * right,
+                        BinaryOp::Div => left / right,
+                        BinaryOp::Pow => left.pow(right as u32),
+                        BinaryOp::Rem => left % right,
+                        BinaryOp::BitAnd => left & right,
+                        BinaryOp::BitOr => left | right,
+                        BinaryOp::Xor => left ^ right,
+                        BinaryOp::Shl => left << right,
+                        BinaryOp::Shr => left >> right,
+                        BinaryOp::Rol => left.rotate_left(right as u32),
+                        BinaryOp::Ror => left.rotate_right(right as u32),
+                        _ => panic!("u64s can't do that"),
+                    })
+                } else {
+                    unimplemented!()
                 }
             }
             Expr::Call { target, args } => {
-                let fun_name = match &**target {
-                    Expr::Var { name } => name,
-                    _ => unimplemented!("you can't actually execute this yet"),
+                let decl = match target.execute(scope) {
+                    Value::Function(decl) => decl,
+                    _ => panic!("tried to call a non-function"),
                 };
-                match scope.get_function(fun_name) {
-                    Some(decl) => {
-                        assert_eq!(
-                            decl.args.len(),
-                            args.len(),
-                            "wrong number of arguments to function {:?}",
-                            fun_name
-                        );
 
-                        let mut evaluated_args = HashMap::new();
-                        for arg in args.iter().enumerate() {
-                            evaluated_args.insert(decl.args[arg.0].name.clone(), arg.1.execute(scope));
-                        }
+                let fun_name = &decl.name;
+                assert_eq!(
+                    decl.args.len(),
+                    args.len(),
+                    "wrong number of arguments to function {:?}",
+                    fun_name
+                );
 
-                        if let Some(stmts) = &decl.body {
-                            let mut new_scope = Scope::new(scope);
-                            evaluated_args.into_iter().for_each(|(k, v)| {
-                                new_scope.variables.insert(k, v);
-                            });
-                            execute_stmts(stmts, &mut new_scope).unwrap_or(0)
-                        } else if decl.modifiers.contains(Modifiers::EXTERN) {
-                            execute_builtin_function(fun_name, evaluated_args)
-                        } else {
-                            panic!("function {:?} doesn't have a body", fun_name);
-                        }
-                    }
-                    None => panic!("function {:?} isn't defined", fun_name),
+                let mut evaluated_args = HashMap::new();
+                for arg in args.iter().enumerate() {
+                    evaluated_args.insert(decl.args[arg.0].name.clone(), arg.1.execute(scope));
+                }
+
+                if let Some(stmts) = &decl.body {
+                    let mut new_scope = Scope::new(scope);
+                    evaluated_args.into_iter().for_each(|(k, v)| {
+                        new_scope.variables.insert(k, v);
+                    });
+                    execute_stmts(stmts, &mut new_scope).unwrap_or(Value::unit())
+                } else if decl.modifiers.contains(Modifiers::EXTERN) {
+                    execute_builtin_function(fun_name, evaluated_args)
+                } else {
+                    panic!("function {:?} doesn't have a body", fun_name);
                 }
             }
             _ => todo!(),
@@ -176,11 +160,11 @@ impl Expr {
     }
 }
 
-fn execute_builtin_function(name: &Ident, args: HashMap<Ident, u64>) -> u64 {
+fn execute_builtin_function(name: &Ident, args: HashMap<Ident, Value>) -> Value {
     match name.id.as_str() {
         "print" => {
             println!("{}", args.iter().next().unwrap().1);
-            0
+            Value::unit()
         }
         _ => panic!("unknown builtin function {:?}", name),
     }

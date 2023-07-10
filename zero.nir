@@ -1,9 +1,7 @@
-extern pure fn print(x: u64)
+extern pure fn print(x: any)
 
-fn magic(x: u64): u64 {
-    69 * x
+fn magic(): function {
+    print
 }
 
-fn science(x: u64) = 42 * x
-
-print(science(magic(10)))
+magic()("Hello World!")
