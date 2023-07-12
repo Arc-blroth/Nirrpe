@@ -49,16 +49,34 @@ pub enum Ctrl {
 #[derive(Assoc, Clone, Debug, PartialEq)]
 #[func(pub const fn keyword(&self) -> &'static str)]
 pub enum Keyword {
+    #[assoc(keyword = "break")]
+    Break,
+    #[assoc(keyword = "continue")]
+    Continue,
+    #[assoc(keyword = "else")]
+    Else,
     #[assoc(keyword = "extern")]
     Extern,
     #[assoc(keyword = "fn")]
     Fn,
+    #[assoc(keyword = "for")]
+    For,
+    #[assoc(keyword = "if")]
+    If,
+    #[assoc(keyword = "in")]
+    In,
     #[assoc(keyword = "impure")]
     Impure,
+    #[assoc(keyword = "loop")]
+    Loop,
     #[assoc(keyword = "priv")]
     Priv,
     #[assoc(keyword = "pub")]
     Pub,
     #[assoc(keyword = "pure")]
     Pure,
+    #[assoc(keyword = "return")]
+    Return,
+    #[assoc(keyword = "while")]
+    While,
 }

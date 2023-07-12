@@ -14,7 +14,7 @@ use chumsky::{select, IterParser, Parser};
 use ordinal::Ordinal;
 use smallvec::SmallVec;
 
-use crate::parse::ast::{BinaryOp, Decl, Expr, FnArg, FnDecl, Lit, Modifiers, Program, Stmt};
+use crate::parse::ast::{BinaryOp, ControlFlow, Decl, Expr, FnArg, FnDecl, Lit, Modifiers, Program, Stmt};
 use crate::parse::ident::Ident;
 use crate::parse::lexer::token::{Ctrl, Keyword, Token};
 use crate::parse::utils::SmallVecContainer;
@@ -46,9 +46,26 @@ pub type Spanned<T> = (T, SimpleSpan);
 
 pub fn parser<'s>() -> Parser!['s, Program] {
     recursive(|stmts| {
+        let expr = expr(stmts.clone());
+
+        let r#continue = just(Token::Keyword(Keyword::Continue))
+            .to(Stmt::ControlFlow(ControlFlow::Continue))
+            .labelled("continue statement".into());
+        let r#break = just(Token::Keyword(Keyword::Break))
+            .ignore_then(expr.clone().or_not())
+            .map(|x| Stmt::ControlFlow(ControlFlow::Break(x)))
+            .labelled("break statement".into());
+        let r#return = just(Token::Keyword(Keyword::Return))
+            .ignore_then(expr.clone().or_not())
+            .map(|x| Stmt::ControlFlow(ControlFlow::Return(x)))
+            .labelled("return statement".into());
+
         decl(stmts)
             .map(Stmt::Decl)
-            .or(expr().map(Stmt::Expr))
+            .or(expr.map(Stmt::Expr))
+            .or(r#continue)
+            .or(r#break)
+            .or(r#return)
             .labelled("statement".into())
             .separated_by(just(Token::Ctrl(Ctrl::Semicolon)).repeated().ignored())
             .allow_leading()
@@ -59,9 +76,7 @@ pub fn parser<'s>() -> Parser!['s, Program] {
     .then_ignore(end())
 }
 
-pub fn decl<'b, 's: 'b>(
-    stmts: Recursive<Direct<'s, 'b, ParserInput<'s>, Vec<Stmt>, ParserExtra<'s>>>,
-) -> Parser!['s, Decl, 'b] {
+pub fn decl<'s>(stmts: Recursive<Direct<'s, 's, ParserInput<'s>, Vec<Stmt>, ParserExtra<'s>>>) -> Parser!['s, Decl] {
     let ident = ident();
     let r#fn = {
         let modifiers = choice([
@@ -148,12 +163,13 @@ pub fn decl<'b, 's: 'b>(
             )
             .then(
                 stmts
+                    .clone()
                     .delimited_by(just(Token::Ctrl(Ctrl::LeftBrace)), just(Token::Ctrl(Ctrl::RightBrace)))
                     .recover_with(via_parser(
                         nested_recovery::<{ Ctrl::LeftBracket }, { Ctrl::RightBracket }>().map(|x| vec![Stmt::Expr(x)]),
                     ))
                     .or(just(Token::Ctrl(Ctrl::Eq))
-                        .ignore_then(expr())
+                        .ignore_then(expr(stmts))
                         .map(|x| vec![Stmt::Expr(x)]))
                     .labelled("function body".into())
                     .or_not(),
@@ -172,7 +188,7 @@ pub fn decl<'b, 's: 'b>(
     r#fn
 }
 
-pub fn expr<'s>() -> Parser!['s, Expr] {
+pub fn expr<'s>(stmts: Recursive<Direct<'s, 's, ParserInput<'s>, Vec<Stmt>, ParserExtra<'s>>>) -> Parser!['s, Expr] {
     recursive(|expr| {
         let inline_expr = recursive(|inline_expr| {
             let value = select! {
@@ -232,14 +248,47 @@ pub fn expr<'s>() -> Parser!['s, Expr] {
             )
         });
 
-        let block = inline_expr
+        let block = stmts.delimited_by(just(Token::Ctrl(Ctrl::LeftBrace)), just(Token::Ctrl(Ctrl::RightBrace)));
+
+        let expr_block = block
             .clone()
-            .delimited_by(just(Token::Ctrl(Ctrl::LeftBrace)), just(Token::Ctrl(Ctrl::RightBrace)))
+            .map(|body| Expr::Block { body })
             .recover_with(via_parser(nested_recovery::<
                 { Ctrl::LeftBracket },
                 { Ctrl::RightBracket },
-            >()));
-        block.or(inline_expr)
+            >()))
+            .labelled("block expression".into());
+
+        let stmts_block = block.clone().recover_with(via_parser(
+            nested_recovery::<{ Ctrl::LeftBracket }, { Ctrl::RightBracket }>().to(vec![Stmt::Error]),
+        ));
+
+        let if_block = just(Token::Keyword(Keyword::If))
+            .ignore_then(expr.clone())
+            .then(stmts_block.clone())
+            .then(just(Token::Keyword(Keyword::Else)).ignore_then(expr.clone()).or_not())
+            .map(|((condition, body), r#else)| Expr::If {
+                condition: Box::new(condition),
+                body,
+                r#else: r#else.map(Box::new),
+            })
+            .labelled("if block".into());
+
+        let loop_block = just(Token::Keyword(Keyword::Loop))
+            .ignore_then(stmts_block.clone())
+            .map(|body| Expr::Loop { body })
+            .labelled("loop block".into());
+
+        let while_block = just(Token::Keyword(Keyword::While))
+            .ignore_then(expr.clone())
+            .then(stmts_block.clone())
+            .map(|(condition, body)| Expr::While {
+                condition: Box::new(condition),
+                body,
+            })
+            .labelled("while block".into());
+
+        if_block.or(loop_block).or(while_block).or(expr_block).or(inline_expr)
     })
 }
 

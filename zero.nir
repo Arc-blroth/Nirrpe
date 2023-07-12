@@ -1,8 +1,13 @@
+extern pure fn panic(x: any)
 extern pure fn print(x: any)
 
-fn magic(a: function, b: function, c: any) {
-    a(c)
-    b(c)
+fn factorial(x: u64): u64 {
+    if x == 0 || x == 1 {
+        return 1
+    } else {
+        return x * factorial(x - 1)
+    }
 }
 
-magic(print, print, "Hello World!")
+print(factorial(10))
+panic("nooooooooo")

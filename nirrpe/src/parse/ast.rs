@@ -25,6 +25,8 @@ pub struct Program {
 pub enum Stmt {
     Decl(Decl),
     Expr(Expr),
+    ControlFlow(ControlFlow),
+    Error,
 }
 
 #[derive(Clone, Debug)]
@@ -62,6 +64,21 @@ pub enum Expr {
     Call {
         target: Box<Expr>,
         args: Vec<Expr>,
+    },
+    Block {
+        body: Vec<Stmt>,
+    },
+    If {
+        condition: Box<Expr>,
+        body: Vec<Stmt>,
+        r#else: Option<Box<Expr>>,
+    },
+    Loop {
+        body: Vec<Stmt>,
+    },
+    While {
+        condition: Box<Expr>,
+        body: Vec<Stmt>,
     },
     Error,
 }
@@ -116,4 +133,11 @@ pub enum BinaryOp {
     #[assoc(from_char = '>')]
     Gt,
     Gte,
+}
+
+#[derive(Clone, Debug)]
+pub enum ControlFlow {
+    Continue,
+    Break(Option<Expr>),
+    Return(Option<Expr>),
 }

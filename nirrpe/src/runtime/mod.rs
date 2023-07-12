@@ -3,7 +3,7 @@ pub mod value;
 
 use std::collections::HashMap;
 
-use crate::parse::ast::{BinaryOp, Decl, Expr, Modifiers, Program, Stmt};
+use crate::parse::ast::{BinaryOp, ControlFlow, Decl, Expr, Modifiers, Program, Stmt};
 use crate::parse::ident::Ident;
 use crate::runtime::value::Value;
 
@@ -27,6 +27,31 @@ impl<'r> Default for NirrpeRuntime<'r> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum RuntimeControlFlow {
+    Continue,
+    Break(Value),
+    Return(Value),
+    Panic(Value),
+}
+
+pub macro runtime_panic {
+    ($msg:literal) => {
+        return ::core::result::Result::Err(
+            $crate::runtime::RuntimeControlFlow::Panic(
+                $crate::runtime::value::Value::Str($msg.to_string())
+            )
+        )
+    },
+    ($msg:literal, $($args:tt)*) => {
+        return ::core::result::Result::Err(
+            $crate::runtime::RuntimeControlFlow::Panic(
+                $crate::runtime::value::Value::Str(::std::format!($msg, $($args)*))
+            )
+        )
+    },
 }
 
 pub struct Scope<'p> {
@@ -59,88 +84,131 @@ impl<'p> Scope<'p> {
 
 impl Program {
     pub fn execute(&self, scope: &mut Scope) {
-        execute_stmts(&self.stmts, scope);
+        if let Err(err) = execute_stmts(&self.stmts, scope) {
+            match err {
+                RuntimeControlFlow::Panic(x) => {
+                    eprintln!("Program panicked at '{}'", x);
+                }
+                err => {
+                    eprintln!(
+                        "Illegal top-level {}",
+                        match err {
+                            RuntimeControlFlow::Continue => "continue",
+                            RuntimeControlFlow::Break(_) => "break",
+                            RuntimeControlFlow::Return(_) => "return",
+                            _ => unreachable!(),
+                        }
+                    );
+                }
+            }
+        }
     }
 }
 
-fn execute_stmts(stmts: &Vec<Stmt>, scope: &mut Scope) -> Option<Value> {
-    let mut last_ret = None;
+fn execute_stmts(stmts: &Vec<Stmt>, scope: &mut Scope) -> Result<Value, RuntimeControlFlow> {
+    let mut last_ret = Value::unit();
     for stmt in stmts {
-        match stmt.execute(scope) {
-            Some(x) => last_ret = x,
-            None => break,
-        }
+        last_ret = stmt.execute(scope)?;
     }
-    last_ret
+    Ok(last_ret)
 }
 
 impl Stmt {
-    pub fn execute(&self, scope: &mut Scope) -> Option<Option<Value>> {
+    pub fn execute(&self, scope: &mut Scope) -> Result<Value, RuntimeControlFlow> {
         match self {
             Stmt::Decl(Decl::FnDecl(function)) => {
                 if scope.variables.contains_key(&function.name) {
-                    panic!("function {:?} already defined", function.name);
+                    runtime_panic!("function {:?} already defined", function.name);
                 } else {
                     scope
                         .variables
                         .insert(function.name.clone(), Value::Function(function.clone()));
                 }
-                Some(None)
+                Ok(Value::unit())
             }
-            Stmt::Expr(expr) => Some(Some(expr.execute(scope))),
+            Stmt::Expr(expr) => expr.execute(scope),
+            Stmt::ControlFlow(flow) => match flow {
+                ControlFlow::Continue => Err(RuntimeControlFlow::Continue),
+                ControlFlow::Break(maybe_expr) => {
+                    let value = match maybe_expr {
+                        Some(expr) => expr.execute(scope)?,
+                        None => Value::unit(),
+                    };
+                    Err(RuntimeControlFlow::Break(value))
+                }
+                ControlFlow::Return(maybe_expr) => {
+                    let value = match maybe_expr {
+                        Some(expr) => expr.execute(scope)?,
+                        None => Value::unit(),
+                    };
+                    Err(RuntimeControlFlow::Return(value))
+                }
+            },
+            Stmt::Error => runtime_panic!("Cannot execute AST with errors!"),
         }
     }
 }
 
 impl Expr {
-    pub fn execute(&self, scope: &mut Scope) -> Value {
+    pub fn execute(&self, scope: &mut Scope) -> Result<Value, RuntimeControlFlow> {
         match self {
-            Expr::Lit(lit) => lit.into(),
+            Expr::Lit(lit) => Ok(lit.into()),
             Expr::Var { name } => match scope.get_value(name) {
-                Some(x) => x,
-                None => panic!("variable {:?} isn't defined", name),
+                Some(x) => Ok(x),
+                None => runtime_panic!("variable {:?} isn't defined", name),
             },
             Expr::BinaryOp { op, left, right } => {
-                let left = left.execute(scope);
-                let right = right.execute(scope);
+                let left = left.execute(scope)?;
+                let right = right.execute(scope)?;
                 if let Value::U64(left) = left && let Value::U64(right) = right {
-                    Value::U64(match op {
-                        BinaryOp::Add => left + right,
-                        BinaryOp::Sub => left - right,
-                        BinaryOp::Mul => left * right,
-                        BinaryOp::Div => left / right,
-                        BinaryOp::Pow => left.pow(right as u32),
-                        BinaryOp::Rem => left % right,
-                        BinaryOp::BitAnd => left & right,
-                        BinaryOp::BitOr => left | right,
-                        BinaryOp::Xor => left ^ right,
-                        BinaryOp::Shl => left << right,
-                        BinaryOp::Shr => left >> right,
-                        BinaryOp::Rol => left.rotate_left(right as u32),
-                        BinaryOp::Ror => left.rotate_right(right as u32),
-                        _ => panic!("u64s can't do that"),
+                    Ok(match op {
+                        BinaryOp::Add => Value::U64(left + right),
+                        BinaryOp::Sub => Value::U64(left - right),
+                        BinaryOp::Mul => Value::U64(left * right),
+                        BinaryOp::Div => Value::U64(left / right),
+                        BinaryOp::Pow => Value::U64(left.pow(right as u32)),
+                        BinaryOp::Rem => Value::U64(left % right),
+                        BinaryOp::BitAnd => Value::U64(left & right),
+                        BinaryOp::BitOr => Value::U64(left | right),
+                        BinaryOp::Xor => Value::U64(left ^ right),
+                        BinaryOp::Shl => Value::U64(left << right),
+                        BinaryOp::Shr => Value::U64(left >> right),
+                        BinaryOp::Rol => Value::U64(left.rotate_left(right as u32)),
+                        BinaryOp::Ror => Value::U64(left.rotate_right(right as u32)),
+                        BinaryOp::Eq => Value::Bool(left == right),
+                        BinaryOp::Neq => Value::Bool(left != right),
+                        BinaryOp::Lt => Value::Bool(left < right),
+                        BinaryOp::Lte => Value::Bool(left <= right),
+                        BinaryOp::Gt => Value::Bool(left > right),
+                        BinaryOp::Gte => Value::Bool(left >= right),
+                        _ => runtime_panic!("u64s can't do that"),
+                    })
+                } else if let Value::Bool(left) = left && let Value::Bool(right) = right {
+                    Ok(match op {
+                        BinaryOp::And => Value::Bool(left && right),
+                        BinaryOp::Or => Value::Bool(left || right),
+                        BinaryOp::Eq => Value::Bool(left == right),
+                        BinaryOp::Neq => Value::Bool(left != right),
+                        _ => runtime_panic!("bools can't do that"),
                     })
                 } else {
-                    unimplemented!()
+                    todo!()
                 }
             }
             Expr::Call { target, args } => {
-                let decl = match target.execute(scope) {
+                let decl = match target.execute(scope)? {
                     Value::Function(decl) => decl,
-                    _ => panic!("tried to call a non-function"),
+                    _ => runtime_panic!("tried to call a non-function"),
                 };
 
                 let fun_name = &decl.name;
-                assert_eq!(
-                    decl.args.len(),
-                    args.len(),
-                    "wrong number of arguments to function {:?}",
-                    fun_name
-                );
+                if decl.args.len() != args.len() {
+                    runtime_panic!("wrong number of arguments to function {:?}", fun_name);
+                }
 
                 let mut evaluated_args = HashMap::new();
                 for arg in args.iter().enumerate() {
-                    evaluated_args.insert(decl.args[arg.0].name.clone(), arg.1.execute(scope));
+                    evaluated_args.insert(decl.args[arg.0].name.clone(), arg.1.execute(scope)?);
                 }
 
                 if let Some(stmts) = &decl.body {
@@ -148,24 +216,84 @@ impl Expr {
                     evaluated_args.into_iter().for_each(|(k, v)| {
                         new_scope.variables.insert(k, v);
                     });
-                    execute_stmts(stmts, &mut new_scope).unwrap_or(Value::unit())
+                    match execute_stmts(stmts, &mut new_scope) {
+                        Ok(x) | Err(RuntimeControlFlow::Return(x)) => Ok(x),
+                        Err(RuntimeControlFlow::Continue) => runtime_panic!("Illegal continue outside loop"),
+                        Err(RuntimeControlFlow::Break(_)) => runtime_panic!("Illegal break outside block or loop"),
+                        x @ Err(RuntimeControlFlow::Panic(_)) => x,
+                    }
                 } else if decl.modifiers.contains(Modifiers::EXTERN) {
                     execute_builtin_function(fun_name, evaluated_args)
                 } else {
-                    panic!("function {:?} doesn't have a body", fun_name);
+                    runtime_panic!("function {:?} doesn't have a body", fun_name);
                 }
+            }
+            Expr::Block { body } => {
+                let mut new_scope = Scope::new(scope);
+                match execute_stmts(body, &mut new_scope) {
+                    Ok(x) | Err(RuntimeControlFlow::Break(x)) => Ok(x),
+                    x => x,
+                }
+            }
+            Expr::If {
+                condition,
+                body,
+                r#else,
+            } => {
+                if match condition.execute(scope)? {
+                    Value::Bool(x) => x,
+                    _ => runtime_panic!("expected bool type for condition"),
+                } {
+                    let mut new_scope = Scope::new(scope);
+                    execute_stmts(body, &mut new_scope)
+                } else if let Some(r#else) = r#else {
+                    let mut new_scope = Scope::new(scope);
+                    r#else.execute(&mut new_scope)
+                } else {
+                    Ok(Value::unit())
+                }
+            }
+            Expr::Loop { body } => loop {
+                let mut new_scope = Scope::new(scope);
+                match execute_stmts(body, &mut new_scope) {
+                    Err(RuntimeControlFlow::Break(x)) => break Ok(x),
+                    Err(RuntimeControlFlow::Continue) => {}
+                    Err(x) => break Err(x),
+                    _ => {}
+                }
+            },
+            Expr::While { condition, body } => {
+                while match condition.execute(scope)? {
+                    Value::Bool(x) => x,
+                    _ => runtime_panic!("expected bool type for condition"),
+                } {
+                    let mut new_scope = Scope::new(scope);
+                    match execute_stmts(body, &mut new_scope) {
+                        Err(RuntimeControlFlow::Break(x)) => return Ok(x),
+                        Err(RuntimeControlFlow::Continue) => {}
+                        Err(x) => return Err(x),
+                        _ => {}
+                    }
+                }
+                Ok(Value::unit())
             }
             _ => todo!(),
         }
     }
 }
 
-fn execute_builtin_function(name: &Ident, args: HashMap<Ident, Value>) -> Value {
+fn execute_builtin_function(name: &Ident, args: HashMap<Ident, Value>) -> Result<Value, RuntimeControlFlow> {
     match name.id.as_str() {
+        "panic" => Err(RuntimeControlFlow::Panic(
+            args.into_iter()
+                .next()
+                .map(|x| x.1)
+                .unwrap_or(Value::Str("explicit panic".to_string())),
+        )),
         "print" => {
             println!("{}", args.iter().next().unwrap().1);
-            Value::unit()
+            Ok(Value::unit())
         }
-        _ => panic!("unknown builtin function {:?}", name),
+        _ => runtime_panic!("unknown builtin function {:?}", name),
     }
 }
