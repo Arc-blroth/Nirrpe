@@ -1,13 +1,23 @@
 extern pure fn panic(x: any)
 extern pure fn print(x: any)
+extern pure fn println(x: any)
 
-fn factorial(x: u64): u64 {
-    if x == 0 || x == 1 {
-        return 1
-    } else {
-        return x * factorial(x - 1)
+fn make_triangle(size: u64) {
+    let i = 0
+    while i < size {
+        let j = 0
+        while j < (size - i) / 2 {
+            print(" ")
+            j = j + 1
+        }
+        j = 0
+        while j < i + 1 {
+            print("#")
+            j = j + 1
+        }
+        print("\n")
+        i = i + 2
     }
 }
 
-print(factorial(10))
-panic("nooooooooo")
+make_triangle(7)

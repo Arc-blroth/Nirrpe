@@ -1,9 +1,10 @@
 pub mod utils;
 pub mod value;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 
-use crate::parse::ast::{BinaryOp, ControlFlow, Decl, Expr, Modifiers, Program, Stmt};
+use crate::parse::ast::{Assignment, BinaryOp, ControlFlow, Decl, Expr, Modifiers, Program, Stmt};
 use crate::parse::ident::Ident;
 use crate::runtime::value::Value;
 
@@ -56,28 +57,49 @@ pub macro runtime_panic {
 
 pub struct Scope<'p> {
     parent: Option<&'p Scope<'p>>,
-    variables: HashMap<Ident, Value>,
+    variables: RefCell<HashMap<Ident, Value>>,
 }
 
 impl<'p> Scope<'p> {
     pub fn new(parent: &'p Scope<'p>) -> Self {
         Self {
             parent: Some(parent),
-            variables: HashMap::new(),
+            variables: RefCell::new(HashMap::new()),
         }
     }
 
     pub fn global() -> Self {
         Self {
             parent: None,
-            variables: HashMap::new(),
+            variables: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub fn has_local_value(&self, name: &Ident) -> bool {
+        self.variables.borrow().contains_key(name)
+    }
+
+    pub fn has_value(&self, name: &Ident) -> bool {
+        match self.variables.borrow().contains_key(name) {
+            true => true,
+            false => self.parent.map_or(false, |p| p.has_value(name)),
         }
     }
 
     pub fn get_value(&self, name: &Ident) -> Option<Value> {
-        match self.variables.get(name) {
+        match self.variables.borrow().get(name) {
             Some(x) => Some(x.clone()),
             None => self.parent.and_then(|p| p.get_value(name)),
+        }
+    }
+
+    pub fn replace_value(&self, name: &Ident, value: Value) -> bool {
+        match self.variables.borrow_mut().get_mut(name) {
+            Some(x) => {
+                *x = value;
+                true
+            }
+            None => self.parent.map_or(false, move |p| p.replace_value(name, value)),
         }
     }
 }
@@ -116,17 +138,39 @@ fn execute_stmts(stmts: &Vec<Stmt>, scope: &mut Scope) -> Result<Value, RuntimeC
 impl Stmt {
     pub fn execute(&self, scope: &mut Scope) -> Result<Value, RuntimeControlFlow> {
         match self {
-            Stmt::Decl(Decl::FnDecl(function)) => {
-                if scope.variables.contains_key(&function.name) {
-                    runtime_panic!("function {:?} already defined", function.name);
-                } else {
-                    scope
-                        .variables
-                        .insert(function.name.clone(), Value::Function(function.clone()));
+            Stmt::Decl(decl) => match decl {
+                Decl::LetDecl(r#let) => {
+                    if scope.has_local_value(&r#let.name) {
+                        runtime_panic!("variable {:?} already defined", r#let.name);
+                    } else {
+                        let value = r#let.value.execute(scope)?;
+                        scope.variables.borrow_mut().insert(r#let.name.clone(), value);
+                    }
+                    Ok(Value::unit())
+                }
+                Decl::FnDecl(function) => {
+                    if scope.has_local_value(&function.name) {
+                        runtime_panic!("function {:?} already defined", function.name);
+                    } else {
+                        scope
+                            .variables
+                            .borrow_mut()
+                            .insert(function.name.clone(), Value::Function(function.clone()));
+                    }
+                    Ok(Value::unit())
+                }
+            },
+            Stmt::Expr(expr) => expr.execute(scope),
+            Stmt::Assignment(Assignment { name, value }) => {
+                if !scope.has_value(name) {
+                    runtime_panic!("variable {:?} is undefined", name);
+                }
+                let result = value.execute(scope)?;
+                if !scope.replace_value(name, result) {
+                    panic!("variable {:?} is undefined but was defined earlier?", name);
                 }
                 Ok(Value::unit())
             }
-            Stmt::Expr(expr) => expr.execute(scope),
             Stmt::ControlFlow(flow) => match flow {
                 ControlFlow::Continue => Err(RuntimeControlFlow::Continue),
                 ControlFlow::Break(maybe_expr) => {
@@ -214,7 +258,7 @@ impl Expr {
                 if let Some(stmts) = &decl.body {
                     let mut new_scope = Scope::new(scope);
                     evaluated_args.into_iter().for_each(|(k, v)| {
-                        new_scope.variables.insert(k, v);
+                        new_scope.variables.borrow_mut().insert(k, v);
                     });
                     match execute_stmts(stmts, &mut new_scope) {
                         Ok(x) | Err(RuntimeControlFlow::Return(x)) => Ok(x),
@@ -291,6 +335,10 @@ fn execute_builtin_function(name: &Ident, args: HashMap<Ident, Value>) -> Result
                 .unwrap_or(Value::Str("explicit panic".to_string())),
         )),
         "print" => {
+            print!("{}", args.iter().next().unwrap().1);
+            Ok(Value::unit())
+        }
+        "println" => {
             println!("{}", args.iter().next().unwrap().1);
             Ok(Value::unit())
         }

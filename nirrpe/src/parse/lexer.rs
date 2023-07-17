@@ -36,25 +36,7 @@ pub fn lexer<'s>() -> Lexer!['s, Vec<Spanned<Token>>] {
 
     let ctrl = one_of("()[]{}:;,.=").map(Ctrl::from_char).unwrapped().map(Token::Ctrl);
 
-    let keyword = just_str(Keyword::Extern.keyword())
-        .to(Keyword::Extern)
-        .or(just_str(Keyword::Break.keyword()).to(Keyword::Break))
-        .or(just_str(Keyword::Continue.keyword()).to(Keyword::Continue))
-        .or(just_str(Keyword::Else.keyword()).to(Keyword::Else))
-        .or(just_str(Keyword::Extern.keyword()).to(Keyword::Extern))
-        .or(just_str(Keyword::Fn.keyword()).to(Keyword::Fn))
-        .or(just_str(Keyword::For.keyword()).to(Keyword::For))
-        .or(just_str(Keyword::If.keyword()).to(Keyword::If))
-        .or(just_str(Keyword::In.keyword()).to(Keyword::In))
-        .or(just_str(Keyword::Impure.keyword()).to(Keyword::Impure))
-        .or(just_str(Keyword::Loop.keyword()).to(Keyword::Loop))
-        .or(just_str(Keyword::Priv.keyword()).to(Keyword::Priv))
-        .or(just_str(Keyword::Pub.keyword()).to(Keyword::Pub))
-        .or(just_str(Keyword::Pure.keyword()).to(Keyword::Pure))
-        .or(just_str(Keyword::Return.keyword()).to(Keyword::Return))
-        .or(just_str(Keyword::While.keyword()).to(Keyword::While))
-        .map(Token::Keyword)
-        .labelled("keyword");
+    let keyword = Keyword::lexer().map(Token::Keyword).labelled("keyword");
 
     let ident = chumsky::text::unicode::ident()
         .map(Ident::new)

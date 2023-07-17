@@ -14,7 +14,9 @@ use chumsky::{select, IterParser, Parser};
 use ordinal::Ordinal;
 use smallvec::SmallVec;
 
-use crate::parse::ast::{BinaryOp, ControlFlow, Decl, Expr, FnArg, FnDecl, Lit, Modifiers, Program, Stmt};
+use crate::parse::ast::{
+    Assignment, BinaryOp, ControlFlow, Decl, Expr, FnArg, FnDecl, LetDecl, Lit, Modifiers, Program, Stmt,
+};
 use crate::parse::ident::Ident;
 use crate::parse::lexer::token::{Ctrl, Keyword, Token};
 use crate::parse::utils::SmallVecContainer;
@@ -47,6 +49,19 @@ pub type Spanned<T> = (T, SimpleSpan);
 pub fn parser<'s>() -> Parser!['s, Program] {
     recursive(|stmts| {
         let expr = expr(stmts.clone());
+        let ident = ident();
+
+        let r#let = just(Token::Keyword(Keyword::Let))
+            .ignore_then(ident.clone())
+            .then_ignore(just(Token::Ctrl(Ctrl::Eq)))
+            .then(expr.clone())
+            .map(|(name, value)| Stmt::Decl(Decl::LetDecl(LetDecl { name, value })))
+            .labelled("let declaration".into());
+        let assignment = ident
+            .then_ignore(just(Token::Ctrl(Ctrl::Eq)))
+            .then(expr.clone())
+            .map(|(name, value)| Stmt::Assignment(Assignment { name, value }))
+            .labelled("variable assignment".into());
 
         let r#continue = just(Token::Keyword(Keyword::Continue))
             .to(Stmt::ControlFlow(ControlFlow::Continue))
@@ -62,6 +77,8 @@ pub fn parser<'s>() -> Parser!['s, Program] {
 
         decl(stmts)
             .map(Stmt::Decl)
+            .or(r#let)
+            .or(assignment)
             .or(expr.map(Stmt::Expr))
             .or(r#continue)
             .or(r#break)

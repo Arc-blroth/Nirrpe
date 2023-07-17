@@ -25,12 +25,14 @@ pub struct Program {
 pub enum Stmt {
     Decl(Decl),
     Expr(Expr),
+    Assignment(Assignment),
     ControlFlow(ControlFlow),
     Error,
 }
 
 #[derive(Clone, Debug)]
 pub enum Decl {
+    LetDecl(LetDecl),
     FnDecl(FnDecl),
 }
 
@@ -48,6 +50,12 @@ pub struct FnArg {
     pub name: Ident,
     pub ty: Ident,
     pub variadic: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct LetDecl {
+    pub name: Ident,
+    pub value: Expr,
 }
 
 #[derive(Clone, Debug)]
@@ -133,6 +141,12 @@ pub enum BinaryOp {
     #[assoc(from_char = '>')]
     Gt,
     Gte,
+}
+
+#[derive(Clone, Debug)]
+pub struct Assignment {
+    pub name: Ident,
+    pub value: Expr,
 }
 
 #[derive(Clone, Debug)]
