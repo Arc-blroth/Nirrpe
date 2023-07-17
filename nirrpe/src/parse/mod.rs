@@ -358,9 +358,7 @@ fn nested_recovery<'s, const LEFT: Ctrl, const RIGHT: Ctrl>() -> Parser!['s, Exp
                 (Token::Ctrl(Ctrl::LeftBracket), Token::Ctrl(Ctrl::RightBracket)),
             ]
         } else {
-            #[allow(unconditional_panic)]
-            let _ = ["invalid arguments"][1];
-            other_closers::<{ Ctrl::LeftParen }, { Ctrl::RightParen }>()
+            panic!("invalid arguments");
         }
     }
 
