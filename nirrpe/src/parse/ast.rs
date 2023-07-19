@@ -103,34 +103,50 @@ pub enum Lit {
 
 #[derive(Assoc, Copy, Clone, Eq, PartialEq, Debug, ConstParamTy)]
 #[func(pub const fn from_char(x: char) -> Option<Self>)]
+#[func(pub const fn allows_assignment(&self) -> bool { false })]
 pub enum BinaryOp {
     // arithmetic
     #[assoc(from_char = '+')]
+    #[assoc(allows_assignment = true)]
     Add,
     #[assoc(from_char = '-')]
+    #[assoc(allows_assignment = true)]
     Sub,
     #[assoc(from_char = '*')]
+    #[assoc(allows_assignment = true)]
     Mul,
     #[assoc(from_char = '/')]
+    #[assoc(allows_assignment = true)]
     Div,
+    #[assoc(allows_assignment = true)]
     Pow,
     #[assoc(from_char = '%')]
+    #[assoc(allows_assignment = true)]
     Rem,
     // bitwise
     #[assoc(from_char = '&')]
+    #[assoc(allows_assignment = true)]
     BitAnd,
     #[assoc(from_char = '|')]
+    #[assoc(allows_assignment = true)]
     BitOr,
     #[assoc(from_char = '^')]
+    #[assoc(allows_assignment = true)]
     Xor,
+    #[assoc(allows_assignment = true)]
     Shl,
+    #[assoc(allows_assignment = true)]
     Shr,
     #[assoc(from_char = '⟲')]
+    #[assoc(allows_assignment = true)]
     Rol,
     #[assoc(from_char = '⟳')]
+    #[assoc(allows_assignment = true)]
     Ror,
     // logical
+    #[assoc(allows_assignment = true)]
     And,
+    #[assoc(allows_assignment = true)]
     Or,
     // comparison
     Eq,
@@ -147,6 +163,7 @@ pub enum BinaryOp {
 pub struct Assignment {
     pub name: Ident,
     pub value: Expr,
+    pub op: Option<BinaryOp>,
 }
 
 #[derive(Clone, Debug)]

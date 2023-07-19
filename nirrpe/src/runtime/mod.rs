@@ -161,11 +161,25 @@ impl Stmt {
                 }
             },
             Stmt::Expr(expr) => expr.execute(scope),
-            Stmt::Assignment(Assignment { name, value }) => {
+            Stmt::Assignment(Assignment { name, value, op }) => {
                 if !scope.has_value(name) {
                     runtime_panic!("variable {:?} is undefined", name);
                 }
-                let result = value.execute(scope)?;
+                let mut result = value.execute(scope)?;
+                if let Some(op) = op {
+                    assert!(
+                        op.allows_assignment(),
+                        "invalid AST: given operator {:?} is not assignable!",
+                        op
+                    );
+                    result = execute_builtin_binop(
+                        *op,
+                        scope
+                            .get_value(name)
+                            .unwrap_or_else(|| panic!("variable {:?} is undefined but was defined earlier?", name)),
+                        result,
+                    )?;
+                }
                 if !scope.replace_value(name, result) {
                     panic!("variable {:?} is undefined but was defined earlier?", name);
                 }
@@ -204,40 +218,7 @@ impl Expr {
             Expr::BinaryOp { op, left, right } => {
                 let left = left.execute(scope)?;
                 let right = right.execute(scope)?;
-                if let Value::U64(left) = left && let Value::U64(right) = right {
-                    Ok(match op {
-                        BinaryOp::Add => Value::U64(left + right),
-                        BinaryOp::Sub => Value::U64(left - right),
-                        BinaryOp::Mul => Value::U64(left * right),
-                        BinaryOp::Div => Value::U64(left / right),
-                        BinaryOp::Pow => Value::U64(left.pow(right as u32)),
-                        BinaryOp::Rem => Value::U64(left % right),
-                        BinaryOp::BitAnd => Value::U64(left & right),
-                        BinaryOp::BitOr => Value::U64(left | right),
-                        BinaryOp::Xor => Value::U64(left ^ right),
-                        BinaryOp::Shl => Value::U64(left << right),
-                        BinaryOp::Shr => Value::U64(left >> right),
-                        BinaryOp::Rol => Value::U64(left.rotate_left(right as u32)),
-                        BinaryOp::Ror => Value::U64(left.rotate_right(right as u32)),
-                        BinaryOp::Eq => Value::Bool(left == right),
-                        BinaryOp::Neq => Value::Bool(left != right),
-                        BinaryOp::Lt => Value::Bool(left < right),
-                        BinaryOp::Lte => Value::Bool(left <= right),
-                        BinaryOp::Gt => Value::Bool(left > right),
-                        BinaryOp::Gte => Value::Bool(left >= right),
-                        _ => runtime_panic!("u64s can't do that"),
-                    })
-                } else if let Value::Bool(left) = left && let Value::Bool(right) = right {
-                    Ok(match op {
-                        BinaryOp::And => Value::Bool(left && right),
-                        BinaryOp::Or => Value::Bool(left || right),
-                        BinaryOp::Eq => Value::Bool(left == right),
-                        BinaryOp::Neq => Value::Bool(left != right),
-                        _ => runtime_panic!("bools can't do that"),
-                    })
-                } else {
-                    todo!()
-                }
+                execute_builtin_binop(*op, left, right)
             }
             Expr::Call { target, args } => {
                 let decl = match target.execute(scope)? {
@@ -323,6 +304,43 @@ impl Expr {
             }
             _ => todo!(),
         }
+    }
+}
+
+fn execute_builtin_binop(op: BinaryOp, left: Value, right: Value) -> Result<Value, RuntimeControlFlow> {
+    if let Value::U64(left) = left && let Value::U64(right) = right {
+        Ok(match op {
+            BinaryOp::Add => Value::U64(left + right),
+            BinaryOp::Sub => Value::U64(left - right),
+            BinaryOp::Mul => Value::U64(left * right),
+            BinaryOp::Div => Value::U64(left / right),
+            BinaryOp::Pow => Value::U64(left.pow(right as u32)),
+            BinaryOp::Rem => Value::U64(left % right),
+            BinaryOp::BitAnd => Value::U64(left & right),
+            BinaryOp::BitOr => Value::U64(left | right),
+            BinaryOp::Xor => Value::U64(left ^ right),
+            BinaryOp::Shl => Value::U64(left << right),
+            BinaryOp::Shr => Value::U64(left >> right),
+            BinaryOp::Rol => Value::U64(left.rotate_left(right as u32)),
+            BinaryOp::Ror => Value::U64(left.rotate_right(right as u32)),
+            BinaryOp::Eq => Value::Bool(left == right),
+            BinaryOp::Neq => Value::Bool(left != right),
+            BinaryOp::Lt => Value::Bool(left < right),
+            BinaryOp::Lte => Value::Bool(left <= right),
+            BinaryOp::Gt => Value::Bool(left > right),
+            BinaryOp::Gte => Value::Bool(left >= right),
+            _ => runtime_panic!("u64s can't do that"),
+        })
+    } else if let Value::Bool(left) = left && let Value::Bool(right) = right {
+        Ok(match op {
+            BinaryOp::And => Value::Bool(left && right),
+            BinaryOp::Or => Value::Bool(left || right),
+            BinaryOp::Eq => Value::Bool(left == right),
+            BinaryOp::Neq => Value::Bool(left != right),
+            _ => runtime_panic!("bools can't do that"),
+        })
+    } else {
+        todo!()
     }
 }
 

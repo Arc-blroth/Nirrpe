@@ -8,16 +8,18 @@ fn make_triangle(size: u64) {
         let j = 0
         while j < (size - i) / 2 {
             print(" ")
-            j = j + 1
+            j += 1
         }
         j = 0
         while j < i + 1 {
             print("#")
-            j = j + 1
+            j += 1
         }
         print("\n")
-        i = i + 2
+        i += 2
     }
 }
 
-make_triangle(7)
+let a = 42 == 42
+a &&= 69 == 68
+print(a)

@@ -4,12 +4,13 @@ pub mod lexer;
 pub mod utils;
 
 use bitflags::Flags;
-use chumsky::error::Rich;
+use chumsky::error::{Error as ChumskyError, Rich};
 use chumsky::extra::Err as ChumskyErr;
 use chumsky::input::SpannedInput;
 use chumsky::label::LabelError;
-use chumsky::prelude::{choice, end, just, nested_delimiters, recursive, via_parser, Recursive, SimpleSpan};
+use chumsky::prelude::{any, choice, end, just, nested_delimiters, recursive, via_parser, Recursive, SimpleSpan};
 use chumsky::recursive::Direct;
+use chumsky::util::MaybeRef;
 use chumsky::{select, IterParser, Parser};
 use ordinal::Ordinal;
 use smallvec::SmallVec;
@@ -58,9 +59,30 @@ pub fn parser<'s>() -> Parser!['s, Program] {
             .map(|(name, value)| Stmt::Decl(Decl::LetDecl(LetDecl { name, value })))
             .labelled("let declaration".into());
         let assignment = ident
-            .then_ignore(just(Token::Ctrl(Ctrl::Eq)))
+            .then(
+                any()
+                    .try_map(|x, span| match x {
+                        Token::Op(binop) => Ok(binop),
+                        x => Err(ChumskyError::<ParserInput<'s>>::expected_found(
+                            [],
+                            Some(MaybeRef::Val(x)),
+                            span,
+                        )),
+                    })
+                    .or_not()
+                    .then_ignore(just(Token::Ctrl(Ctrl::Eq)))
+                    .validate(|x, span, emitter| {
+                        if let Some(op) = x && !op.allows_assignment() {
+                            emitter.emit(Rich::custom(
+                                span,
+                                format!("{:?} is not a valid assignment operator", op),
+                            ))
+                        }
+                        x
+                    }),
+            )
             .then(expr.clone())
-            .map(|(name, value)| Stmt::Assignment(Assignment { name, value }))
+            .map(|((name, op), value)| Stmt::Assignment(Assignment { name, value, op }))
             .labelled("variable assignment".into());
 
         let r#continue = just(Token::Keyword(Keyword::Continue))
