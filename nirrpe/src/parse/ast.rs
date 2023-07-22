@@ -64,6 +64,10 @@ pub enum Expr {
     Var {
         name: Ident,
     },
+    UnaryOp {
+        ops: Vec<UnaryOp>,
+        input: Box<Expr>,
+    },
     BinaryOp {
         op: BinaryOp,
         left: Box<Expr>,
@@ -99,6 +103,19 @@ pub enum Lit {
     Int(u64),
     Float(f64),
     Str(String),
+}
+
+#[derive(Assoc, Copy, Clone, Eq, PartialEq, Debug)]
+#[func(pub const fn from_char(x: char) -> Option<Self>)]
+pub enum UnaryOp {
+    #[assoc(from_char = '+')]
+    Plus,
+    #[assoc(from_char = '-')]
+    Minus,
+    #[assoc(from_char = '!')]
+    Not,
+    #[assoc(from_char = '~')]
+    BitNot,
 }
 
 #[derive(Assoc, Copy, Clone, Eq, PartialEq, Debug, ConstParamTy)]

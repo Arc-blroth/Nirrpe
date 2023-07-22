@@ -11,7 +11,7 @@ fn make_triangle(size: u64) {
             j += 1
         }
         j = 0
-        while j < i + 1 {
+        while j < i ++ 1 {
             print("#")
             j += 1
         }
@@ -20,6 +20,6 @@ fn make_triangle(size: u64) {
     }
 }
 
-let a = 42 == 42
-a &&= 69 == 68
-print(a)
+if !false {
+    make_triangle(+++++++++11)
+}

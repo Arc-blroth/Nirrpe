@@ -2,7 +2,7 @@ use std::marker::ConstParamTy;
 
 use enum_assoc::Assoc;
 
-use crate::parse::ast::BinaryOp;
+use crate::parse::ast::{BinaryOp, UnaryOp};
 use crate::parse::ident::Ident;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -13,6 +13,7 @@ pub enum Token {
     Int(u64),
     Float(f64),
     Str(String),
+    UnaryOp(UnaryOp),
     Op(BinaryOp),
     Ctrl(Ctrl),
     Keyword(Keyword),

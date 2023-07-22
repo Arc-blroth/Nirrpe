@@ -4,7 +4,7 @@ pub mod token;
 
 use chumsky::prelude::{any, choice, end, one_of, skip_then_retry_until, IterParser, Parser};
 
-use crate::parse::ast::BinaryOp;
+use crate::parse::ast::{BinaryOp, UnaryOp};
 use crate::parse::ident::Ident;
 use crate::parse::lexer::token::{Ctrl, Keyword, Token};
 use crate::parse::utils::just_str;
@@ -34,6 +34,12 @@ pub fn lexer<'s>() -> Lexer!['s, Vec<Spanned<Token>>] {
         .map(Token::Op)
         .labelled("op");
 
+    let unary_op = one_of("!~")
+        .map(UnaryOp::from_char)
+        .unwrapped()
+        .map(Token::UnaryOp)
+        .labelled("unary op");
+
     let ctrl = one_of("()[]{}:;,.=").map(Ctrl::from_char).unwrapped().map(Token::Ctrl);
 
     let keyword = Keyword::lexer().map(Token::Keyword).labelled("keyword");
@@ -43,7 +49,8 @@ pub fn lexer<'s>() -> Lexer!['s, Vec<Spanned<Token>>] {
         .map(Token::Ident)
         .labelled("identifier");
 
-    op.or(ctrl)
+    op.or(unary_op)
+        .or(ctrl)
         .or(bool)
         .or(keyword)
         .or(ident)

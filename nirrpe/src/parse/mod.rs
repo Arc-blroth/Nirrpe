@@ -16,7 +16,7 @@ use ordinal::Ordinal;
 use smallvec::SmallVec;
 
 use crate::parse::ast::{
-    Assignment, BinaryOp, ControlFlow, Decl, Expr, FnArg, FnDecl, LetDecl, Lit, Modifiers, Program, Stmt,
+    Assignment, BinaryOp, ControlFlow, Decl, Expr, FnArg, FnDecl, LetDecl, Lit, Modifiers, Program, Stmt, UnaryOp,
 };
 use crate::parse::ident::Ident;
 use crate::parse::lexer::token::{Ctrl, Keyword, Token};
@@ -239,7 +239,8 @@ pub fn expr<'s>(stmts: Recursive<Direct<'s, 's, ParserInput<'s>, Vec<Stmt>, Pars
             }
             .labelled("value".into());
 
-            let var = ident().map(|name| Expr::Var { name }).labelled("variable".into());
+            let ident = ident();
+            let var = ident.clone().map(|name| Expr::Var { name }).labelled("variable".into());
 
             let exprs = expr
                 .clone()
@@ -263,7 +264,24 @@ pub fn expr<'s>(stmts: Recursive<Direct<'s, 's, ParserInput<'s>, Vec<Stmt>, Pars
 
             let pow = binary_ops!(call, [BinaryOp::Pow]);
 
-            let unary = pow;
+            let unary = just(Token::Op(BinaryOp::Add))
+                .to(UnaryOp::Plus)
+                .or(just(Token::Op(BinaryOp::Sub)).to(UnaryOp::Minus))
+                .or(just(Token::UnaryOp(UnaryOp::Not)).to(UnaryOp::Not))
+                .or(just(Token::UnaryOp(UnaryOp::BitNot)).to(UnaryOp::BitNot))
+                .repeated()
+                .collect::<Vec<_>>()
+                .then(pow)
+                .map(|(ops, pow)| {
+                    if !ops.is_empty() {
+                        Expr::UnaryOp {
+                            ops,
+                            input: Box::new(pow),
+                        }
+                    } else {
+                        pow
+                    }
+                });
 
             binary_ops!(
                 unary,

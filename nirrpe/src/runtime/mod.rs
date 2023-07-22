@@ -4,7 +4,7 @@ pub mod value;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use crate::parse::ast::{Assignment, BinaryOp, ControlFlow, Decl, Expr, Modifiers, Program, Stmt};
+use crate::parse::ast::{Assignment, BinaryOp, ControlFlow, Decl, Expr, Modifiers, Program, Stmt, UnaryOp};
 use crate::parse::ident::Ident;
 use crate::runtime::value::Value;
 
@@ -215,6 +215,13 @@ impl Expr {
                 Some(x) => Ok(x),
                 None => runtime_panic!("variable {:?} isn't defined", name),
             },
+            Expr::UnaryOp { ops, input } => {
+                let mut input = input.execute(scope)?;
+                for op in ops.iter().rev() {
+                    input = execute_builtin_unary_op(*op, input)?;
+                }
+                Ok(input)
+            }
             Expr::BinaryOp { op, left, right } => {
                 let left = left.execute(scope)?;
                 let right = right.execute(scope)?;
@@ -337,6 +344,24 @@ fn execute_builtin_binop(op: BinaryOp, left: Value, right: Value) -> Result<Valu
             BinaryOp::Or => Value::Bool(left || right),
             BinaryOp::Eq => Value::Bool(left == right),
             BinaryOp::Neq => Value::Bool(left != right),
+            _ => runtime_panic!("bools can't do that"),
+        })
+    } else {
+        todo!()
+    }
+}
+
+fn execute_builtin_unary_op(op: UnaryOp, input: Value) -> Result<Value, RuntimeControlFlow> {
+    if let Value::U64(input) = input {
+        Ok(match op {
+            UnaryOp::Plus => Value::U64(input),
+            UnaryOp::Minus => Value::I64(-(input as i64)),
+            UnaryOp::BitNot => Value::U64(!input),
+            _ => runtime_panic!("u64s can't do that"),
+        })
+    } else if let Value::Bool(input) = input {
+        Ok(match op {
+            UnaryOp::Not => Value::Bool(!input),
             _ => runtime_panic!("bools can't do that"),
         })
     } else {
