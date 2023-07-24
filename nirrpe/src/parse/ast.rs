@@ -61,8 +61,15 @@ pub struct LetDecl {
 #[derive(Clone, Debug)]
 pub enum Expr {
     Lit(Lit),
+    Object {
+        props: Vec<(ObjectPropName, Expr)>,
+    },
     Var {
         name: Ident,
+    },
+    Dot {
+        left: Box<Expr>,
+        right: Ident,
     },
     UnaryOp {
         ops: Vec<UnaryOp>,
@@ -103,6 +110,12 @@ pub enum Lit {
     Int(u64),
     Float(f64),
     Str(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum ObjectPropName {
+    Ident(Ident),
+    Expr(Expr),
 }
 
 #[derive(Assoc, Copy, Clone, Eq, PartialEq, Debug)]

@@ -3,10 +3,13 @@ pub mod value;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
-use crate::parse::ast::{Assignment, BinaryOp, ControlFlow, Decl, Expr, Modifiers, Program, Stmt, UnaryOp};
+use crate::parse::ast::{
+    Assignment, BinaryOp, ControlFlow, Decl, Expr, Modifiers, ObjectPropName, Program, Stmt, UnaryOp,
+};
 use crate::parse::ident::Ident;
-use crate::runtime::value::Value;
+use crate::runtime::value::{Object, Value};
 
 pub struct NirrpeRuntime<'r> {
     global: Scope<'r>,
@@ -211,9 +214,31 @@ impl Expr {
     pub fn execute(&self, scope: &mut Scope) -> Result<Value, RuntimeControlFlow> {
         match self {
             Expr::Lit(lit) => Ok(lit.into()),
+            Expr::Object { props } => {
+                let mut values = HashMap::with_capacity(props.len());
+                for (name, expr) in props {
+                    let name = match name {
+                        ObjectPropName::Ident(ident) => ident.id.clone(),
+                        ObjectPropName::Expr(name_expr) => match name_expr.execute(scope)? {
+                            Value::Str(string) => string,
+                            _ => runtime_panic!("computed property name must be a string"),
+                        },
+                    };
+                    let value = expr.execute(scope)?;
+                    values.insert(name, value);
+                }
+                Ok(Value::Object(Rc::new(RefCell::new(Object { values }))))
+            }
             Expr::Var { name } => match scope.get_value(name) {
                 Some(x) => Ok(x),
                 None => runtime_panic!("variable {:?} isn't defined", name),
+            },
+            Expr::Dot { left, right } => match left.execute(scope)? {
+                Value::Object(object) => match object.borrow().values.get(&right.id) {
+                    Some(x) => Ok(x.clone()),
+                    None => runtime_panic!("property {:?} not found in object", right),
+                },
+                _ => runtime_panic!("only objects can have properties"),
             },
             Expr::UnaryOp { ops, input } => {
                 let mut input = input.execute(scope)?;

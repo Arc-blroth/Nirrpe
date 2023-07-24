@@ -3,6 +3,8 @@ pub mod ident;
 pub mod lexer;
 pub mod utils;
 
+use std::collections::HashMap;
+
 use bitflags::Flags;
 use chumsky::error::{Error as ChumskyError, Rich};
 use chumsky::extra::Err as ChumskyErr;
@@ -16,7 +18,8 @@ use ordinal::Ordinal;
 use smallvec::SmallVec;
 
 use crate::parse::ast::{
-    Assignment, BinaryOp, ControlFlow, Decl, Expr, FnArg, FnDecl, LetDecl, Lit, Modifiers, Program, Stmt, UnaryOp,
+    Assignment, BinaryOp, ControlFlow, Decl, Expr, FnArg, FnDecl, LetDecl, Lit, Modifiers, ObjectPropName, Program,
+    Stmt, UnaryOp,
 };
 use crate::parse::ident::Ident;
 use crate::parse::lexer::token::{Ctrl, Keyword, Token};
@@ -205,7 +208,7 @@ pub fn decl<'s>(stmts: Recursive<Direct<'s, 's, ParserInput<'s>, Vec<Stmt>, Pars
                     .clone()
                     .delimited_by(just(Token::Ctrl(Ctrl::LeftBrace)), just(Token::Ctrl(Ctrl::RightBrace)))
                     .recover_with(via_parser(
-                        nested_recovery::<{ Ctrl::LeftBracket }, { Ctrl::RightBracket }>().map(|x| vec![Stmt::Expr(x)]),
+                        nested_recovery::<{ Ctrl::LeftBrace }, { Ctrl::RightBrace }>().map(|x| vec![Stmt::Expr(x)]),
                     ))
                     .or(just(Token::Ctrl(Ctrl::Eq))
                         .ignore_then(expr(stmts))
@@ -237,9 +240,68 @@ pub fn expr<'s>(stmts: Recursive<Direct<'s, 's, ParserInput<'s>, Vec<Stmt>, Pars
                 Token::Float(x) => Expr::Lit(Lit::Float(x)),
                 Token::Str(x) => Expr::Lit(Lit::Str(x)),
             }
-            .labelled("value".into());
+            .labelled("literal".into());
 
             let ident = ident();
+
+            let object = ident
+                .clone()
+                .map_with_span(|x, span| (ObjectPropName::Ident(x), span))
+                .or(expr
+                    .clone()
+                    .delimited_by(
+                        just(Token::Ctrl(Ctrl::LeftBracket)),
+                        just(Token::Ctrl(Ctrl::RightBracket)),
+                    )
+                    .recover_with(via_parser(nested_recovery::<
+                        { Ctrl::LeftBracket },
+                        { Ctrl::RightBracket },
+                    >()))
+                    .map_with_span(|x, span| (ObjectPropName::Expr(x), span)))
+                .then_ignore(just(Token::Ctrl(Ctrl::Colon)))
+                .then(expr.clone())
+                .separated_by(just(Token::Ctrl(Ctrl::Comma)))
+                .allow_trailing()
+                .collect::<Vec<_>>()
+                .validate(|x, _, emitter| {
+                    let mut props = Vec::new();
+                    let mut duplicates = HashMap::new();
+                    for ((name, span), expr) in x {
+                        if let ObjectPropName::Ident(name_ident) = &name {
+                            duplicates
+                                .entry(name_ident.clone())
+                                .or_insert_with(SmallVec::<[SimpleSpan; 3]>::new)
+                                .push(span);
+                        }
+                        props.push((name, expr));
+                    }
+                    for (name, spans) in duplicates {
+                        if spans.len() > 1 {
+                            let mut err =
+                                Rich::custom(spans[1], format!("property `{}' specified more than once", name.id,));
+                            <Rich<_, _, String> as LabelError<'s, ParserInput<'s>, _>>::in_context(
+                                &mut err,
+                                "first usage found here".into(),
+                                spans[0],
+                            );
+                            if spans.len() > 2 {
+                                for span in spans.iter().enumerate().skip(2) {
+                                    <Rich<_, _, String> as LabelError<'s, ParserInput<'s>, _>>::in_context(
+                                        &mut err,
+                                        format!("{} additional usage found here", Ordinal(span.0 + 1),),
+                                        *span.1,
+                                    );
+                                }
+                            }
+                            emitter.emit(err);
+                        }
+                    }
+                    Expr::Object { props }
+                })
+                .delimited_by(just(Token::Ctrl(Ctrl::LeftBrace)), just(Token::Ctrl(Ctrl::RightBrace)))
+                // don't use recovery here in case this is a block expression
+                .labelled("object".into());
+
             let var = ident.clone().map(|name| Expr::Var { name }).labelled("variable".into());
 
             let exprs = expr
@@ -249,10 +311,19 @@ pub fn expr<'s>(stmts: Recursive<Direct<'s, 's, ParserInput<'s>, Vec<Stmt>, Pars
                 .collect::<Vec<_>>();
 
             let atom = value
+                .or(object)
                 .or(var)
                 .or(inline_expr.delimited_by(just(Token::Ctrl(Ctrl::LeftParen)), just(Token::Ctrl(Ctrl::RightParen))));
 
-            let call = atom.foldl(
+            let dot = atom.foldl(
+                just(Token::Ctrl(Ctrl::Period)).ignore_then(ident.clone()).repeated(),
+                |left, right| Expr::Dot {
+                    left: Box::new(left),
+                    right,
+                },
+            );
+
+            let call = dot.foldl(
                 exprs
                     .delimited_by(just(Token::Ctrl(Ctrl::LeftParen)), just(Token::Ctrl(Ctrl::RightParen)))
                     .repeated(),
@@ -310,14 +381,13 @@ pub fn expr<'s>(stmts: Recursive<Direct<'s, 's, ParserInput<'s>, Vec<Stmt>, Pars
         let expr_block = block
             .clone()
             .map(|body| Expr::Block { body })
-            .recover_with(via_parser(nested_recovery::<
-                { Ctrl::LeftBracket },
-                { Ctrl::RightBracket },
-            >()))
+            .recover_with(via_parser(
+                nested_recovery::<{ Ctrl::LeftBrace }, { Ctrl::RightBrace }>(),
+            ))
             .labelled("block expression".into());
 
         let stmts_block = block.clone().recover_with(via_parser(
-            nested_recovery::<{ Ctrl::LeftBracket }, { Ctrl::RightBracket }>().to(vec![Stmt::Error]),
+            nested_recovery::<{ Ctrl::LeftBrace }, { Ctrl::RightBrace }>().to(vec![Stmt::Error]),
         ));
 
         let if_block = just(Token::Keyword(Keyword::If))
@@ -345,7 +415,7 @@ pub fn expr<'s>(stmts: Recursive<Direct<'s, 's, ParserInput<'s>, Vec<Stmt>, Pars
             })
             .labelled("while block".into());
 
-        if_block.or(loop_block).or(while_block).or(expr_block).or(inline_expr)
+        if_block.or(loop_block).or(while_block).or(inline_expr).or(expr_block)
     })
 }
 

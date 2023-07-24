@@ -2,24 +2,13 @@ extern pure fn panic(x: any)
 extern pure fn print(x: any)
 extern pure fn println(x: any)
 
-fn make_triangle(size: u64) {
-    let i = 0
-    while i < size {
-        let j = 0
-        while j < (size - i) / 2 {
-            print(" ")
-            j += 1
-        }
-        j = 0
-        while j < i ++ 1 {
-            print("#")
-            j += 1
-        }
-        print("\n")
-        i += 2
-    }
+fn what_does_the_cat_say() = "meow"
+
+let cat = {
+    name: "ozzy",
+    [what_does_the_cat_say()]: ">w<",
 }
 
-if !false {
-    make_triangle(+++++++++11)
-}
+print(cat.name)
+print(" the cat says ")
+println(cat.meow)
