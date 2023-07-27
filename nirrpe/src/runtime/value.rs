@@ -5,7 +5,9 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::parse::ast::{FnDecl, Lit};
+use crate::parse::ident::Ident;
 use crate::runtime::utils::DelegateDebugToDisplay;
+use crate::runtime::{runtime_panic, RuntimeControlFlow};
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -31,6 +33,17 @@ pub enum Value {
 impl Value {
     pub fn unit() -> Self {
         Self::Tuple(Vec::new())
+    }
+
+    /// Gets a property on an Object.
+    pub fn try_get_property(&self, prop: &Ident) -> Result<Value, RuntimeControlFlow> {
+        match self {
+            Value::Object(object) => match object.borrow().values.get(&prop.id) {
+                Some(x) => Ok(x.clone()),
+                None => runtime_panic!("property {:?} not found in object", prop),
+            },
+            _ => runtime_panic!("only objects can have properties"),
+        }
     }
 }
 

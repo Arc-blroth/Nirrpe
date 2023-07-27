@@ -191,7 +191,7 @@ pub enum BinaryOp {
 
 #[derive(Clone, Debug)]
 pub struct Assignment {
-    pub name: Ident,
+    pub path: Vec<Ident>,
     pub value: Expr,
     pub op: Option<BinaryOp>,
 }

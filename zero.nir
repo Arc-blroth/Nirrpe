@@ -7,8 +7,18 @@ fn what_does_the_cat_say() = "meow"
 let cat = {
     name: "ozzy",
     [what_does_the_cat_say()]: ">w<",
+    ratings: {
+        average: 0,
+    },
 }
 
+cat.name = "orca"
+cat.meow = "rawr!"
+cat.ratings.average = 5
 print(cat.name)
-print(" the cat says ")
+print(" the ")
+print(cat.ratings.average)
+print("-star cat says ")
 println(cat.meow)
+
+cat.blah.foo = "this should crash"

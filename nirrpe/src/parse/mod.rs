@@ -62,6 +62,8 @@ pub fn parser<'s>() -> Parser!['s, Program] {
             .map(|(name, value)| Stmt::Decl(Decl::LetDecl(LetDecl { name, value })))
             .labelled("let declaration".into());
         let assignment = ident
+            .separated_by(just(Token::Ctrl(Ctrl::Period)))
+            .collect::<Vec<_>>()
             .then(
                 any()
                     .try_map(|x, span| match x {
@@ -85,7 +87,7 @@ pub fn parser<'s>() -> Parser!['s, Program] {
                     }),
             )
             .then(expr.clone())
-            .map(|((name, op), value)| Stmt::Assignment(Assignment { name, value, op }))
+            .map(|((path, op), value)| Stmt::Assignment(Assignment { path, value, op }))
             .labelled("variable assignment".into());
 
         let r#continue = just(Token::Keyword(Keyword::Continue))

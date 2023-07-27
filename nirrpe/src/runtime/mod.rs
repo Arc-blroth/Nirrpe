@@ -164,10 +164,8 @@ impl Stmt {
                 }
             },
             Stmt::Expr(expr) => expr.execute(scope),
-            Stmt::Assignment(Assignment { name, value, op }) => {
-                if !scope.has_value(name) {
-                    runtime_panic!("variable {:?} is undefined", name);
-                }
+            Stmt::Assignment(Assignment { path, value, op }) => {
+                assert!(!path.is_empty(), "empty left hand for assignment?");
                 let mut result = value.execute(scope)?;
                 if let Some(op) = op {
                     assert!(
@@ -175,16 +173,35 @@ impl Stmt {
                         "invalid AST: given operator {:?} is not assignable!",
                         op
                     );
-                    result = execute_builtin_binop(
-                        *op,
-                        scope
-                            .get_value(name)
-                            .unwrap_or_else(|| panic!("variable {:?} is undefined but was defined earlier?", name)),
-                        result,
-                    )?;
+                    let mut current = match scope.get_value(&path[0]) {
+                        Some(value) => value,
+                        None => runtime_panic!("variable {:?} is undefined", &path[0]),
+                    };
+                    for ident in &path[1..] {
+                        current = current.try_get_property(ident)?;
+                    }
+                    result = execute_builtin_binop(*op, current, result)?;
                 }
-                if !scope.replace_value(name, result) {
-                    panic!("variable {:?} is undefined but was defined earlier?", name);
+                if path.len() == 1 {
+                    if !scope.replace_value(&path[0], result) {
+                        panic!("variable {:?} is undefined", &path[0]);
+                    }
+                } else {
+                    let mut current = match scope.get_value(&path[0]) {
+                        Some(value) => value,
+                        None => runtime_panic!("variable {:?} is undefined", &path[0]),
+                    };
+                    for ident in &path[1..path.len() - 1] {
+                        current = current.try_get_property(ident)?;
+                    }
+                    let last_ident = &path[path.len() - 1];
+                    match current {
+                        Value::Object(object) => match object.borrow_mut().values.get_mut(&last_ident.id) {
+                            Some(x) => *x = result,
+                            None => runtime_panic!("property {:?} not found in object", last_ident),
+                        },
+                        _ => runtime_panic!("only objects can have properties"),
+                    }
                 }
                 Ok(Value::unit())
             }
@@ -233,13 +250,7 @@ impl Expr {
                 Some(x) => Ok(x),
                 None => runtime_panic!("variable {:?} isn't defined", name),
             },
-            Expr::Dot { left, right } => match left.execute(scope)? {
-                Value::Object(object) => match object.borrow().values.get(&right.id) {
-                    Some(x) => Ok(x.clone()),
-                    None => runtime_panic!("property {:?} not found in object", right),
-                },
-                _ => runtime_panic!("only objects can have properties"),
-            },
+            Expr::Dot { left, right } => left.execute(scope)?.try_get_property(right),
             Expr::UnaryOp { ops, input } => {
                 let mut input = input.execute(scope)?;
                 for op in ops.iter().rev() {
